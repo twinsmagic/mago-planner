@@ -1,0 +1,1406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mago Webinar Content Planner</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+        @media (max-width: 1024px) {
+            .calendar-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Storage utilities
+        const STORAGE_KEY = 'mago_webinar_ideas';
+
+        const saveToStorage = async (data) => {
+            try {
+                await window.storage.set(STORAGE_KEY, JSON.stringify(data));
+            } catch (error) {
+                console.error('Storage error:', error);
+            }
+        };
+
+        const loadFromStorage = async () => {
+            try {
+                const result = await window.storage.get(STORAGE_KEY);
+                return result ? JSON.parse(result.value) : { ideas: [], scheduledWebinars: [] };
+            } catch (error) {
+                console.log('No existing data found, starting fresh');
+                return { ideas: [], scheduledWebinars: [] };
+            }
+        };
+
+        function App() {
+            const [ideas, setIdeas] = useState([]);
+            const [scheduledWebinars, setScheduledWebinars] = useState([]);
+            const [currentView, setCurrentView] = useState('dashboard');
+            const [selectedIdea, setSelectedIdea] = useState(null);
+            const [isLoading, setIsLoading] = useState(true);
+
+            // Load data on mount
+            useEffect(() => {
+                const loadData = async () => {
+                    const data = await loadFromStorage();
+                    setIdeas(data.ideas || []);
+                    setScheduledWebinars(data.scheduledWebinars || []);
+                    setIsLoading(false);
+                };
+                loadData();
+            }, []);
+
+            // Save data whenever it changes
+            useEffect(() => {
+                if (!isLoading) {
+                    saveToStorage({ ideas, scheduledWebinars });
+                }
+            }, [ideas, scheduledWebinars, isLoading]);
+
+            const addIdea = (idea) => {
+                const newIdea = {
+                    ...idea,
+                    id: Date.now().toString(),
+                    createdAt: new Date().toISOString(),
+                    status: 'idea' // idea, developing, scheduled, delivered
+                };
+                setIdeas([newIdea, ...ideas]);
+            };
+
+            const updateIdea = (id, updates) => {
+                setIdeas(ideas.map(idea => idea.id === id ? { ...idea, ...updates } : idea));
+            };
+
+            const deleteIdea = (id) => {
+                if (confirm('Are you sure you want to delete this idea?')) {
+                    setIdeas(ideas.filter(idea => idea.id !== id));
+                    if (selectedIdea?.id === id) {
+                        setSelectedIdea(null);
+                    }
+                }
+            };
+
+            const scheduleWebinar = (ideaId, date) => {
+                const idea = ideas.find(i => i.id === ideaId);
+                const newWebinar = {
+                    id: Date.now().toString(),
+                    ideaId,
+                    date,
+                    title: idea.title,
+                    isFlexible: false
+                };
+                setScheduledWebinars([...scheduledWebinars, newWebinar]);
+                updateIdea(ideaId, { status: 'scheduled' });
+            };
+
+            const unscheduleWebinar = (webinarId) => {
+                const webinar = scheduledWebinars.find(w => w.id === webinarId);
+                if (webinar) {
+                    updateIdea(webinar.ideaId, { status: 'developing' });
+                }
+                setScheduledWebinars(scheduledWebinars.filter(w => w.id !== webinarId));
+            };
+
+            if (isLoading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center">
+                        <div className="text-2xl text-gray-600">Loading your content vault...</div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
+                    <Header currentView={currentView} setCurrentView={setCurrentView} />
+                    
+                    <div className="max-w-7xl mx-auto px-4 py-8">
+                        {currentView === 'dashboard' && (
+                            <Dashboard 
+                                ideas={ideas} 
+                                scheduledWebinars={scheduledWebinars}
+                                setCurrentView={setCurrentView}
+                                setSelectedIdea={setSelectedIdea}
+                            />
+                        )}
+                        {currentView === 'quick-capture' && (
+                            <QuickCapture onAdd={addIdea} setCurrentView={setCurrentView} />
+                        )}
+                        {currentView === 'brainstorm' && (
+                            <BrainstormMode onAdd={addIdea} setCurrentView={setCurrentView} />
+                        )}
+                        {currentView === 'all-ideas' && (
+                            <AllIdeas 
+                                ideas={ideas} 
+                                onSelect={(idea) => {
+                                    setSelectedIdea(idea);
+                                    setCurrentView('develop');
+                                }}
+                                onDelete={deleteIdea}
+                            />
+                        )}
+                        {currentView === 'calendar' && (
+                            <Calendar 
+                                ideas={ideas}
+                                scheduledWebinars={scheduledWebinars}
+                                onSchedule={scheduleWebinar}
+                                onUnschedule={unscheduleWebinar}
+                            />
+                        )}
+                        {currentView === 'develop' && selectedIdea && (
+                            <DevelopIdea 
+                                idea={selectedIdea}
+                                onUpdate={(updates) => updateIdea(selectedIdea.id, updates)}
+                                onSchedule={(date) => {
+                                    scheduleWebinar(selectedIdea.id, date);
+                                    setCurrentView('calendar');
+                                }}
+                                onBack={() => setCurrentView('all-ideas')}
+                            />
+                        )}
+                        {currentView === 'ai-generator' && (
+                            <AIGenerator onAdd={addIdea} setCurrentView={setCurrentView} />
+                        )}
+                        {currentView === 'import' && (
+                            <BulkImport onImport={(importedIdeas) => {
+                                // Import all ideas at once to avoid storage race conditions
+                                const newIdeas = importedIdeas.map((idea, index) => ({
+                                    ...idea,
+                                    id: Date.now().toString() + '-' + index,
+                                    createdAt: new Date().toISOString(),
+                                    status: 'idea'
+                                }));
+                                setIdeas([...newIdeas, ...ideas]);
+                                alert(`Successfully imported ${importedIdeas.length} ideas!`);
+                                setCurrentView('all-ideas');
+                            }} setCurrentView={setCurrentView} />
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function Header({ currentView, setCurrentView }) {
+            return (
+                <header className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg">
+                    <div className="max-w-7xl mx-auto px-4 py-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h1 className="text-3xl font-bold">🎩 Amazing Mago Content Planner</h1>
+                                <p className="text-purple-100 mt-1">Monthly Mastery Webinar System</p>
+                            </div>
+                            <button
+                                onClick={() => setCurrentView('dashboard')}
+                                className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition"
+                            >
+                                Dashboard
+                            </button>
+                        </div>
+                    </div>
+                </header>
+            );
+        }
+
+        function Dashboard({ ideas, scheduledWebinars, setCurrentView, setSelectedIdea }) {
+            const stats = {
+                total: ideas.length,
+                ideas: ideas.filter(i => i.status === 'idea').length,
+                developing: ideas.filter(i => i.status === 'developing').length,
+                scheduled: scheduledWebinars.length,
+                delivered: ideas.filter(i => i.status === 'delivered').length
+            };
+
+            const upcomingWebinars = scheduledWebinars
+                .sort((a, b) => new Date(a.date) - new Date(b.date))
+                .slice(0, 3);
+
+            const recentIdeas = ideas.slice(0, 5);
+
+            return (
+                <div className="space-y-6">
+                    {/* Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        <StatCard title="Total Ideas" value={stats.total} icon="lightbulb" color="yellow" />
+                        <StatCard title="Raw Ideas" value={stats.ideas} icon="star" color="blue" />
+                        <StatCard title="Developing" value={stats.developing} icon="hammer" color="orange" />
+                        <StatCard title="Scheduled" value={stats.scheduled} icon="calendar" color="green" />
+                        <StatCard title="Delivered" value={stats.delivered} icon="check-circle" color="purple" />
+                    </div>
+
+                    {/* Quick Actions */}
+                    <div className="bg-white rounded-xl shadow-md p-6">
+                        <h2 className="text-2xl font-bold mb-4">Quick Actions</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <ActionButton
+                                icon="plus"
+                                title="Quick Capture"
+                                description="Jot down an idea fast"
+                                onClick={() => setCurrentView('quick-capture')}
+                                color="blue"
+                            />
+                            <ActionButton
+                                icon="brain"
+                                title="Guided Brainstorm"
+                                description="Use proven prompts"
+                                onClick={() => setCurrentView('brainstorm')}
+                                color="purple"
+                            />
+                            <ActionButton
+                                icon="robot"
+                                title="AI Generator"
+                                description="Let Claude help you"
+                                onClick={() => setCurrentView('ai-generator')}
+                                color="green"
+                            />
+                            <ActionButton
+                                icon="file-import"
+                                title="Bulk Import"
+                                description="Load multiple ideas"
+                                onClick={() => setCurrentView('import')}
+                                color="orange"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Two Column Layout */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Upcoming Webinars */}
+                        <div className="bg-white rounded-xl shadow-md p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-2xl font-bold">Next 3 Webinars</h2>
+                                <button
+                                    onClick={() => setCurrentView('calendar')}
+                                    className="text-blue-600 hover:text-blue-700 font-semibold"
+                                >
+                                    View Calendar →
+                                </button>
+                            </div>
+                            {upcomingWebinars.length === 0 ? (
+                                <p className="text-gray-500 italic">No webinars scheduled yet</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {upcomingWebinars.map(webinar => (
+                                        <div key={webinar.id} className="border-l-4 border-green-500 pl-4 py-2">
+                                            <div className="font-semibold">{webinar.title}</div>
+                                            <div className="text-sm text-gray-600">
+                                                {new Date(webinar.date).toLocaleDateString('en-US', { 
+                                                    month: 'long', 
+                                                    day: 'numeric', 
+                                                    year: 'numeric' 
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Recent Ideas */}
+                        <div className="bg-white rounded-xl shadow-md p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-2xl font-bold">Recent Ideas</h2>
+                                <button
+                                    onClick={() => setCurrentView('all-ideas')}
+                                    className="text-blue-600 hover:text-blue-700 font-semibold"
+                                >
+                                    View All →
+                                </button>
+                            </div>
+                            {recentIdeas.length === 0 ? (
+                                <p className="text-gray-500 italic">No ideas yet - start capturing!</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {recentIdeas.map(idea => (
+                                        <div 
+                                            key={idea.id} 
+                                            className="border-l-4 border-blue-500 pl-4 py-2 cursor-pointer hover:bg-gray-50 transition"
+                                            onClick={() => {
+                                                setSelectedIdea(idea);
+                                                setCurrentView('develop');
+                                            }}
+                                        >
+                                            <div className="font-semibold">{idea.title}</div>
+                                            <div className="text-sm text-gray-600 flex gap-2 mt-1">
+                                                {idea.tags?.map(tag => (
+                                                    <span key={tag} className="bg-gray-200 px-2 py-0.5 rounded text-xs">
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function StatCard({ title, value, icon, color }) {
+            const colors = {
+                yellow: 'bg-yellow-100 text-yellow-600',
+                blue: 'bg-blue-100 text-blue-600',
+                orange: 'bg-orange-100 text-orange-600',
+                green: 'bg-green-100 text-green-600',
+                purple: 'bg-purple-100 text-purple-600'
+            };
+
+            return (
+                <div className="bg-white rounded-xl shadow-md p-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="text-gray-600 text-sm">{title}</div>
+                            <div className="text-3xl font-bold mt-1">{value}</div>
+                        </div>
+                        <div className={`w-12 h-12 rounded-full ${colors[color]} flex items-center justify-center`}>
+                            <i className={`fas fa-${icon} text-xl`}></i>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function ActionButton({ icon, title, description, onClick, color }) {
+            const colors = {
+                blue: 'bg-blue-500 hover:bg-blue-600',
+                purple: 'bg-purple-500 hover:bg-purple-600',
+                green: 'bg-green-500 hover:bg-green-600',
+                orange: 'bg-orange-500 hover:bg-orange-600'
+            };
+
+            return (
+                <button
+                    onClick={onClick}
+                    className={`${colors[color]} text-white p-6 rounded-xl shadow-md hover:shadow-lg transition text-left`}
+                >
+                    <i className={`fas fa-${icon} text-3xl mb-3`}></i>
+                    <div className="font-bold text-lg">{title}</div>
+                    <div className="text-sm opacity-90 mt-1">{description}</div>
+                </button>
+            );
+        }
+
+        function QuickCapture({ onAdd, setCurrentView }) {
+            const [title, setTitle] = useState('');
+            const [description, setDescription] = useState('');
+            const [source, setSource] = useState('');
+            const [tags, setTags] = useState([]);
+            const [newTag, setNewTag] = useState('');
+
+            const availableTags = [
+                'Mago CRM',
+                'Email Marketing',
+                'SEO',
+                'Google Ads',
+                'Copywriting',
+                'Show Booking',
+                'Feature Release',
+                'Sales',
+                'Automation'
+            ];
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!title.trim()) return;
+
+                onAdd({
+                    title: title.trim(),
+                    description: description.trim(),
+                    source,
+                    tags,
+                    notes: ''
+                });
+
+                setTitle('');
+                setDescription('');
+                setSource('');
+                setTags([]);
+                alert('Idea captured! Add another or go back to dashboard.');
+            };
+
+            const toggleTag = (tag) => {
+                setTags(tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag]);
+            };
+
+            const addCustomTag = () => {
+                if (newTag.trim() && !tags.includes(newTag.trim())) {
+                    setTags([...tags, newTag.trim()]);
+                    setNewTag('');
+                }
+            };
+
+            return (
+                <div className="max-w-3xl mx-auto">
+                    <div className="bg-white rounded-xl shadow-lg p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-3xl font-bold">⚡ Quick Capture</h2>
+                            <button
+                                onClick={() => setCurrentView('dashboard')}
+                                className="text-gray-600 hover:text-gray-800"
+                            >
+                                <i className="fas fa-times text-2xl"></i>
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Webinar Title/Topic *</label>
+                                <input
+                                    type="text"
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                    placeholder="e.g., How to boost email open rates with Mago"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Quick Description</label>
+                                <textarea
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    placeholder="What's this about? Key points to cover..."
+                                    rows="4"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Where did this idea come from?</label>
+                                <select
+                                    value={source}
+                                    onChange={(e) => setSource(e.target.value)}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="">Select source...</option>
+                                    <option value="Inner Circle Question">Inner Circle Question</option>
+                                    <option value="Support Ticket">Support Ticket</option>
+                                    <option value="Aha Moment">Aha Moment</option>
+                                    <option value="Feature Release">Feature Release</option>
+                                    <option value="Student Feedback">Student Feedback</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Tags</label>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    {availableTags.map(tag => (
+                                        <button
+                                            key={tag}
+                                            type="button"
+                                            onClick={() => toggleTag(tag)}
+                                            className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                                                tags.includes(tag)
+                                                    ? 'bg-blue-500 text-white'
+                                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                            }`}
+                                        >
+                                            {tag}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newTag}
+                                        onChange={(e) => setNewTag(e.target.value)}
+                                        placeholder="Add custom tag..."
+                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomTag())}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={addCustomTag}
+                                        className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button
+                                type="submit"
+                                className="w-full bg-blue-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-blue-700 transition"
+                            >
+                                💾 Capture Idea
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        function BrainstormMode({ onAdd, setCurrentView }) {
+            const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
+            const [answers, setAnswers] = useState({});
+            const [generatedIdeas, setGeneratedIdeas] = useState([]);
+
+            const prompts = [
+                {
+                    id: 'challenges',
+                    question: "What challenges are your Magos facing right now?",
+                    placeholder: "e.g., Getting corporate clients to respond, standing out in a crowded market..."
+                },
+                {
+                    id: 'unique',
+                    question: "What's unique about Amazing Mago compared to other CRMs?",
+                    placeholder: "e.g., Built specifically for magicians, automation templates for follow-up..."
+                },
+                {
+                    id: 'problems',
+                    question: "What specific problems does Mago solve?",
+                    placeholder: "e.g., Forgetting to follow up, losing leads in email chaos..."
+                },
+                {
+                    id: 'questions',
+                    question: "What questions do you get most in Office Hours or Inner Circle?",
+                    placeholder: "e.g., How do I set up automated follow-up sequences..."
+                },
+                {
+                    id: 'support',
+                    question: "What support tickets or issues come up repeatedly?",
+                    placeholder: "e.g., Integration with booking calendars, email deliverability..."
+                },
+                {
+                    id: 'results',
+                    question: "What results have your best Magos achieved?",
+                    placeholder: "e.g., Booked 10 more shows per month, increased average booking fee..."
+                },
+                {
+                    id: 'features',
+                    question: "What new features are coming or just released?",
+                    placeholder: "e.g., SMS automation, new email templates..."
+                },
+                {
+                    id: 'trends',
+                    question: "What trends are you seeing in magic/entertainment booking?",
+                    placeholder: "e.g., More virtual shows, corporate hybrid events..."
+                },
+                {
+                    id: 'mistakes',
+                    question: "What mistakes do you see magicians making in their marketing?",
+                    placeholder: "e.g., Not following up within 24 hours, generic proposals..."
+                }
+            ];
+
+            const currentPrompt = prompts[currentPromptIndex];
+
+            const handleNext = () => {
+                if (currentPromptIndex < prompts.length - 1) {
+                    setCurrentPromptIndex(currentPromptIndex + 1);
+                } else {
+                    generateIdeas();
+                }
+            };
+
+            const handlePrevious = () => {
+                if (currentPromptIndex > 0) {
+                    setCurrentPromptIndex(currentPromptIndex - 1);
+                }
+            };
+
+            const generateIdeas = () => {
+                const ideas = [];
+                
+                // Generate ideas from answers
+                Object.entries(answers).forEach(([key, answer]) => {
+                    if (answer.trim()) {
+                        const prompt = prompts.find(p => p.id === key);
+                        const ideaTitle = `Webinar: ${answer.trim().substring(0, 60)}${answer.length > 60 ? '...' : ''}`;
+                        ideas.push({
+                            title: ideaTitle,
+                            description: `Based on: ${prompt.question}\n\n${answer}`,
+                            source: 'Guided Brainstorm',
+                            tags: ['Brainstorm Session']
+                        });
+                    }
+                });
+
+                setGeneratedIdeas(ideas);
+            };
+
+            const saveIdea = (idea) => {
+                onAdd(idea);
+                setGeneratedIdeas(generatedIdeas.filter(i => i !== idea));
+            };
+
+            const saveAllIdeas = () => {
+                generatedIdeas.forEach(idea => onAdd(idea));
+                alert(`${generatedIdeas.length} ideas saved!`);
+                setCurrentView('all-ideas');
+            };
+
+            if (generatedIdeas.length > 0) {
+                return (
+                    <div className="max-w-4xl mx-auto">
+                        <div className="bg-white rounded-xl shadow-lg p-8">
+                            <h2 className="text-3xl font-bold mb-6">💡 Generated Ideas</h2>
+                            <p className="text-gray-600 mb-6">
+                                Based on your answers, here are {generatedIdeas.length} webinar ideas. 
+                                Review and save the ones you like!
+                            </p>
+
+                            <div className="space-y-4 mb-6">
+                                {generatedIdeas.map((idea, index) => (
+                                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex-1">
+                                                <h3 className="font-bold text-lg mb-2">{idea.title}</h3>
+                                                <p className="text-gray-600 text-sm whitespace-pre-line">{idea.description}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => saveIdea(idea)}
+                                                className="ml-4 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
+                                            >
+                                                Save
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={saveAllIdeas}
+                                    className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700"
+                                >
+                                    Save All Ideas
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setGeneratedIdeas([]);
+                                        setCurrentPromptIndex(0);
+                                        setAnswers({});
+                                    }}
+                                    className="px-6 bg-gray-500 text-white py-3 rounded-lg font-bold hover:bg-gray-600"
+                                >
+                                    Start Over
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="max-w-3xl mx-auto">
+                    <div className="bg-white rounded-xl shadow-lg p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-3xl font-bold">🧠 Guided Brainstorm</h2>
+                            <button
+                                onClick={() => setCurrentView('dashboard')}
+                                className="text-gray-600 hover:text-gray-800"
+                            >
+                                <i className="fas fa-times text-2xl"></i>
+                            </button>
+                        </div>
+
+                        <div className="mb-8">
+                            <div className="flex justify-between text-sm text-gray-600 mb-2">
+                                <span>Question {currentPromptIndex + 1} of {prompts.length}</span>
+                                <span>{Math.round(((currentPromptIndex + 1) / prompts.length) * 100)}% Complete</span>
+                            </div>
+                            <div className="h-2 bg-gray-200 rounded-full">
+                                <div 
+                                    className="h-2 bg-blue-600 rounded-full transition-all"
+                                    style={{ width: `${((currentPromptIndex + 1) / prompts.length) * 100}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="mb-8">
+                            <h3 className="text-2xl font-bold mb-4">{currentPrompt.question}</h3>
+                            <textarea
+                                value={answers[currentPrompt.id] || ''}
+                                onChange={(e) => setAnswers({ ...answers, [currentPrompt.id]: e.target.value })}
+                                placeholder={currentPrompt.placeholder}
+                                rows="6"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button
+                                onClick={handlePrevious}
+                                disabled={currentPromptIndex === 0}
+                                className="px-6 py-3 bg-gray-500 text-white rounded-lg font-bold hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                ← Previous
+                            </button>
+                            <button
+                                onClick={handleNext}
+                                className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700"
+                            >
+                                {currentPromptIndex < prompts.length - 1 ? 'Next →' : 'Generate Ideas! 🎉'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function AllIdeas({ ideas, onSelect, onDelete }) {
+            const [filter, setFilter] = useState('all');
+            const [searchTerm, setSearchTerm] = useState('');
+
+            const filteredIdeas = ideas.filter(idea => {
+                const matchesFilter = filter === 'all' || idea.status === filter;
+                const matchesSearch = !searchTerm || 
+                    idea.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    idea.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    idea.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+                return matchesFilter && matchesSearch;
+            });
+
+            return (
+                <div>
+                    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <h2 className="text-3xl font-bold mb-6">All Ideas ({ideas.length})</h2>
+                        
+                        <div className="flex gap-4 mb-4">
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Search ideas..."
+                                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                            />
+                            <select
+                                value={filter}
+                                onChange={(e) => setFilter(e.target.value)}
+                                className="px-4 py-2 border border-gray-300 rounded-lg"
+                            >
+                                <option value="all">All Status</option>
+                                <option value="idea">Raw Ideas</option>
+                                <option value="developing">Developing</option>
+                                <option value="scheduled">Scheduled</option>
+                                <option value="delivered">Delivered</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        {filteredIdeas.length === 0 ? (
+                            <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                                <p className="text-gray-500 text-lg">No ideas found</p>
+                            </div>
+                        ) : (
+                            filteredIdeas.map(idea => (
+                                <div key={idea.id} className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex-1 cursor-pointer" onClick={() => onSelect(idea)}>
+                                            <h3 className="text-xl font-bold mb-2">{idea.title}</h3>
+                                            {idea.description && (
+                                                <p className="text-gray-600 mb-3">{idea.description.substring(0, 150)}...</p>
+                                            )}
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                    idea.status === 'idea' ? 'bg-blue-100 text-blue-600' :
+                                                    idea.status === 'developing' ? 'bg-orange-100 text-orange-600' :
+                                                    idea.status === 'scheduled' ? 'bg-green-100 text-green-600' :
+                                                    'bg-purple-100 text-purple-600'
+                                                }`}>
+                                                    {idea.status}
+                                                </span>
+                                                {idea.source && (
+                                                    <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs">
+                                                        {idea.source}
+                                                    </span>
+                                                )}
+                                                {idea.tags?.map(tag => (
+                                                    <span key={tag} className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-xs">
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => onDelete(idea.id)}
+                                            className="ml-4 text-red-500 hover:text-red-700"
+                                        >
+                                            <i className="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function DevelopIdea({ idea, onUpdate, onSchedule, onBack }) {
+            const [title, setTitle] = useState(idea.title);
+            const [description, setDescription] = useState(idea.description || '');
+            const [notes, setNotes] = useState(idea.notes || '');
+            const [tags, setTags] = useState(idea.tags || []);
+            const [newTag, setNewTag] = useState('');
+
+            const availableTags = [
+                'Mago CRM',
+                'Email Marketing',
+                'SEO',
+                'Google Ads',
+                'Copywriting',
+                'Show Booking',
+                'Feature Release',
+                'Sales',
+                'Automation'
+            ];
+
+            const handleSave = () => {
+                onUpdate({
+                    title,
+                    description,
+                    notes,
+                    tags,
+                    status: idea.status === 'idea' ? 'developing' : idea.status
+                });
+                alert('Idea updated!');
+            };
+
+            const toggleTag = (tag) => {
+                setTags(tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag]);
+            };
+
+            const addCustomTag = () => {
+                if (newTag.trim() && !tags.includes(newTag.trim())) {
+                    setTags([...tags, newTag.trim()]);
+                    setNewTag('');
+                }
+            };
+
+            const handleSchedule = () => {
+                const date = prompt('Enter webinar date (YYYY-MM-DD):');
+                if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                    onSchedule(date);
+                } else if (date) {
+                    alert('Invalid date format. Please use YYYY-MM-DD');
+                }
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto">
+                    <div className="bg-white rounded-xl shadow-lg p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <button
+                                onClick={onBack}
+                                className="text-blue-600 hover:text-blue-700 font-semibold"
+                            >
+                                ← Back to All Ideas
+                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleSave}
+                                    className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700"
+                                >
+                                    💾 Save
+                                </button>
+                                {idea.status !== 'scheduled' && (
+                                    <button
+                                        onClick={handleSchedule}
+                                        className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-700"
+                                    >
+                                        📅 Schedule
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Webinar Title</label>
+                                <input
+                                    type="text"
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-xl font-bold"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Description / Overview</label>
+                                <textarea
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    rows="4"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg"
+                                    placeholder="What's this webinar about? Key points to cover..."
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Development Notes & Outline</label>
+                                <textarea
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    rows="12"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg font-mono text-sm"
+                                    placeholder="Outline, talking points, examples to use, demos to show..."
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Tags</label>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    {availableTags.map(tag => (
+                                        <button
+                                            key={tag}
+                                            type="button"
+                                            onClick={() => toggleTag(tag)}
+                                            className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                                                tags.includes(tag)
+                                                    ? 'bg-blue-500 text-white'
+                                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                            }`}
+                                        >
+                                            {tag}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newTag}
+                                        onChange={(e) => setNewTag(e.target.value)}
+                                        placeholder="Add custom tag..."
+                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomTag())}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={addCustomTag}
+                                        className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="border-t pt-6">
+                                <div className="text-sm text-gray-600">
+                                    <div><strong>Source:</strong> {idea.source || 'Not specified'}</div>
+                                    <div><strong>Created:</strong> {new Date(idea.createdAt).toLocaleDateString()}</div>
+                                    <div><strong>Status:</strong> {idea.status}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function Calendar({ ideas, scheduledWebinars, onSchedule, onUnschedule }) {
+            const [selectedMonth, setSelectedMonth] = useState(0); // 0 = current, 1 = next, 2 = month after
+            
+            const getMonthInfo = (offset) => {
+                const date = new Date();
+                date.setMonth(date.getMonth() + offset);
+                return {
+                    name: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+                    year: date.getFullYear(),
+                    month: date.getMonth()
+                };
+            };
+
+            const unscheduledIdeas = ideas.filter(idea => idea.status !== 'scheduled' && idea.status !== 'delivered');
+
+            const months = [0, 1, 2].map(getMonthInfo);
+
+            const getWebinarsForMonth = (monthInfo) => {
+                return scheduledWebinars.filter(webinar => {
+                    const webinarDate = new Date(webinar.date);
+                    return webinarDate.getMonth() === monthInfo.month && 
+                           webinarDate.getFullYear() === monthInfo.year;
+                }).sort((a, b) => new Date(a.date) - new Date(b.date));
+            };
+
+            return (
+                <div>
+                    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <h2 className="text-3xl font-bold mb-4">📅 3-Month Webinar Calendar</h2>
+                        <p className="text-gray-600">
+                            Drag ideas to schedule them, or click an idea to develop it further first.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                        {/* Unscheduled Ideas */}
+                        <div className="bg-white rounded-xl shadow-lg p-6">
+                            <h3 className="text-xl font-bold mb-4">Unscheduled Ideas ({unscheduledIdeas.length})</h3>
+                            <div className="space-y-3">
+                                {unscheduledIdeas.map(idea => (
+                                    <div
+                                        key={idea.id}
+                                        className="p-3 bg-blue-50 border-2 border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition"
+                                        onClick={() => {
+                                            const date = prompt('Schedule for date (YYYY-MM-DD):');
+                                            if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                                                onSchedule(idea.id, date);
+                                            } else if (date) {
+                                                alert('Invalid date format. Please use YYYY-MM-DD');
+                                            }
+                                        }}
+                                    >
+                                        <div className="font-semibold text-sm">{idea.title}</div>
+                                        <div className="text-xs text-gray-600 mt-1">
+                                            {idea.tags?.slice(0, 2).join(', ')}
+                                        </div>
+                                    </div>
+                                ))}
+                                {unscheduledIdeas.length === 0 && (
+                                    <p className="text-gray-500 text-sm italic">All ideas scheduled!</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Three Month Columns */}
+                        {months.map((monthInfo, index) => {
+                            const webinars = getWebinarsForMonth(monthInfo);
+                            return (
+                                <div key={index} className="bg-white rounded-xl shadow-lg p-6">
+                                    <h3 className="text-xl font-bold mb-4">{monthInfo.name}</h3>
+                                    <div className="space-y-3">
+                                        {webinars.map(webinar => (
+                                            <div
+                                                key={webinar.id}
+                                                className="p-3 bg-green-50 border-2 border-green-300 rounded-lg"
+                                            >
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <div className="font-semibold text-sm">{webinar.title}</div>
+                                                    <button
+                                                        onClick={() => onUnschedule(webinar.id)}
+                                                        className="text-red-500 hover:text-red-700 text-xs"
+                                                    >
+                                                        <i className="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                                <div className="text-xs text-gray-600">
+                                                    {new Date(webinar.date).toLocaleDateString('en-US', { 
+                                                        month: 'short', 
+                                                        day: 'numeric' 
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {webinars.length === 0 && (
+                                            <div className="text-center py-8 text-gray-400">
+                                                <i className="fas fa-calendar-plus text-3xl mb-2"></i>
+                                                <p className="text-sm">No webinars scheduled</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        }
+
+        function AIGenerator({ onAdd, setCurrentView }) {
+            const [prompt, setPrompt] = useState('');
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [generatedIdeas, setGeneratedIdeas] = useState([]);
+            const [error, setError] = useState('');
+
+            const handleGenerate = async () => {
+                if (!prompt.trim()) return;
+
+                setIsGenerating(true);
+                setError('');
+
+                try {
+                    const response = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            model: 'claude-sonnet-4-20250514',
+                            max_tokens: 1000,
+                            messages: [{
+                                role: 'user',
+                                content: `You are helping David Farr, the Marketing Automation Wizard, come up with webinar ideas for his "Amazing Mago Monthly Mastery" series. Mago is a marketing automation CRM specifically for magicians and performers.
+
+Context: ${prompt}
+
+Generate 5 specific webinar topic ideas that would be valuable for magicians using the Mago CRM. Each idea should be actionable and focused on helping them book more shows or use Mago more effectively.
+
+Respond ONLY with a JSON array in this exact format (no markdown, no preamble):
+[
+  {
+    "title": "Webinar title here",
+    "description": "2-3 sentence description of what this webinar would cover"
+  }
+]`
+                            }]
+                        })
+                    });
+
+                    const data = await response.json();
+                    const textContent = data.content.find(item => item.type === 'text')?.text || '';
+                    
+                    // Clean up any markdown backticks
+                    const cleanText = textContent.replace(/```json|```/g, '').trim();
+                    const ideas = JSON.parse(cleanText);
+
+                    const formattedIdeas = ideas.map(idea => ({
+                        ...idea,
+                        source: 'AI Generated',
+                        tags: ['AI Generated', 'Mago CRM']
+                    }));
+
+                    setGeneratedIdeas(formattedIdeas);
+                } catch (err) {
+                    console.error('AI Generation error:', err);
+                    setError('Failed to generate ideas. Please try again.');
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
+            const saveIdea = (idea) => {
+                onAdd(idea);
+                setGeneratedIdeas(generatedIdeas.filter(i => i !== idea));
+            };
+
+            const saveAllIdeas = () => {
+                generatedIdeas.forEach(idea => onAdd(idea));
+                alert(`${generatedIdeas.length} ideas saved!`);
+                setCurrentView('all-ideas');
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto">
+                    <div className="bg-white rounded-xl shadow-lg p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-3xl font-bold">🤖 AI Idea Generator</h2>
+                            <button
+                                onClick={() => setCurrentView('dashboard')}
+                                className="text-gray-600 hover:text-gray-800"
+                            >
+                                <i className="fas fa-times text-2xl"></i>
+                            </button>
+                        </div>
+
+                        <p className="text-gray-600 mb-6">
+                            Tell Claude what's on your mind, and get 5 tailored webinar ideas instantly.
+                        </p>
+
+                        <div className="mb-6">
+                            <label className="block text-sm font-semibold mb-2">What should Claude know?</label>
+                            <textarea
+                                value={prompt}
+                                onChange={(e) => setPrompt(e.target.value)}
+                                rows="6"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="e.g., We just released a new SMS automation feature. Inner Circle members keep asking about how to write better follow-up emails. I want to show them how to use the templates..."
+                            />
+                        </div>
+
+                        {error && (
+                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                                {error}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleGenerate}
+                            disabled={isGenerating || !prompt.trim()}
+                            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-4 rounded-lg font-bold text-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isGenerating ? '🎩 Claude is thinking...' : '✨ Generate Ideas with AI'}
+                        </button>
+
+                        {generatedIdeas.length > 0 && (
+                            <div className="mt-8">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-2xl font-bold">Generated Ideas</h3>
+                                    <button
+                                        onClick={saveAllIdeas}
+                                        className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700"
+                                    >
+                                        Save All
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    {generatedIdeas.map((idea, index) => (
+                                        <div key={index} className="border border-gray-200 rounded-lg p-4">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex-1">
+                                                    <h4 className="font-bold text-lg mb-2">{idea.title}</h4>
+                                                    <p className="text-gray-600 text-sm">{idea.description}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => saveIdea(idea)}
+                                                    className="ml-4 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
+                                                >
+                                                    Save
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function BulkImport({ onImport, setCurrentView }) {
+            const [jsonText, setJsonText] = useState('');
+            const [error, setError] = useState('');
+            const [preview, setPreview] = useState(null);
+
+            const handlePaste = (text) => {
+                setJsonText(text);
+                setError('');
+                
+                try {
+                    const data = JSON.parse(text);
+                    
+                    // Handle the format from our export
+                    const ideas = data.ideas || (Array.isArray(data) ? data : []);
+                    
+                    if (ideas.length === 0) {
+                        setError('No ideas found in JSON');
+                        return;
+                    }
+                    
+                    setPreview({
+                        count: ideas.length,
+                        samples: ideas.slice(0, 5)
+                    });
+                } catch (e) {
+                    setError('Invalid JSON format: ' + e.message);
+                }
+            };
+
+            const handleImport = () => {
+                try {
+                    const data = JSON.parse(jsonText);
+                    const ideas = data.ideas || (Array.isArray(data) ? data : []);
+                    
+                    // Convert to app format
+                    const formattedIdeas = ideas.map(idea => ({
+                        title: idea.title,
+                        description: idea.description,
+                        source: idea.source || 'Bulk Import',
+                        tags: idea.tags || [],
+                        notes: idea.priority ? `Priority: ${idea.priority}` : ''
+                    }));
+                    
+                    onImport(formattedIdeas);
+                } catch (e) {
+                    setError('Import failed: ' + e.message);
+                }
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto">
+                    <div className="bg-white rounded-xl shadow-lg p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-3xl font-bold">📥 Bulk Import Ideas</h2>
+                            <button
+                                onClick={() => setCurrentView('dashboard')}
+                                className="text-gray-600 hover:text-gray-800"
+                            >
+                                <i className="fas fa-times text-2xl"></i>
+                            </button>
+                        </div>
+
+                        <div className="mb-6">
+                            <p className="text-gray-600 mb-4">
+                                Paste your JSON data below. The format should be:
+                            </p>
+                            <pre className="bg-gray-100 p-4 rounded-lg text-sm mb-4 overflow-x-auto">
+{`{
+  "ideas": [
+    {
+      "title": "Webinar Title",
+      "description": "Description...",
+      "source": "Source name",
+      "tags": ["Tag1", "Tag2"],
+      "priority": "High"
+    }
+  ]
+}`}
+                            </pre>
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="block text-sm font-semibold mb-2">JSON Data</label>
+                            <textarea
+                                value={jsonText}
+                                onChange={(e) => handlePaste(e.target.value)}
+                                rows="12"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Paste your JSON here..."
+                            />
+                        </div>
+
+                        {error && (
+                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                                <i className="fas fa-exclamation-triangle mr-2"></i>
+                                {error}
+                            </div>
+                        )}
+
+                        {preview && (
+                            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                                <div className="font-bold text-green-800 mb-2">
+                                    ✓ Ready to import {preview.count} ideas
+                                </div>
+                                <div className="text-sm text-gray-700">
+                                    Preview (first 5):
+                                    <ul className="mt-2 space-y-1">
+                                        {preview.samples.map((idea, i) => (
+                                            <li key={i} className="ml-4">• {idea.title}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleImport}
+                            disabled={!preview}
+                            className="w-full bg-orange-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {preview ? `Import ${preview.count} Ideas` : 'Paste JSON to Preview'}
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
