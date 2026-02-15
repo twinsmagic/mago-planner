@@ -281,6 +281,59 @@
                         </div>
                     </div>
 
+                    {/* Data Management */}
+                    <div className="bg-white rounded-xl shadow-md p-6">
+                        <h2 className="text-2xl font-bold mb-4">Data Management</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <button
+                                onClick={() => {
+                                    const data = { ideas, scheduledWebinars };
+                                    const json = JSON.stringify(data, null, 2);
+                                    const blob = new Blob([json], { type: 'application/json' });
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `mago-planner-backup-${new Date().toISOString().split('T')[0]}.json`;
+                                    a.click();
+                                }}
+                                className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-xl shadow-md hover:shadow-lg transition text-left"
+                            >
+                                <i className="fas fa-download text-2xl mb-2 block"></i>
+                                <div className="font-bold text-lg">Export All Data</div>
+                                <div className="text-sm opacity-90 mt-1">Download backup as JSON</div>
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const input = document.createElement('input');
+                                    input.type = 'file';
+                                    input.accept = '.json';
+                                    input.onchange = async (e) => {
+                                        const file = e.target.files[0];
+                                        if (file) {
+                                            const text = await file.text();
+                                            try {
+                                                const data = JSON.parse(text);
+                                                if (confirm(`Import ${data.ideas?.length || 0} ideas and ${data.scheduledWebinars?.length || 0} scheduled webinars? This will replace your current data.`)) {
+                                                    setIdeas(data.ideas || []);
+                                                    setScheduledWebinars(data.scheduledWebinars || []);
+                                                    alert('Data imported successfully!');
+                                                }
+                                            } catch (err) {
+                                                alert('Invalid backup file: ' + err.message);
+                                            }
+                                        }
+                                    };
+                                    input.click();
+                                }}
+                                className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl shadow-md hover:shadow-lg transition text-left"
+                            >
+                                <i className="fas fa-upload text-2xl mb-2 block"></i>
+                                <div className="font-bold text-lg">Import Backup</div>
+                                <div className="text-sm opacity-90 mt-1">Restore from JSON file</div>
+                            </button>
+                        </div>
+                    </div>
+
                     {/* Two Column Layout */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* Upcoming Webinars */}
