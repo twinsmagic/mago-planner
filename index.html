@@ -1468,7 +1468,7 @@ Respond ONLY with a JSON array in this exact format (no markdown, no preamble):
 
                         <div className="mb-8">
                             <h3 className="text-xl font-bold mb-4">Add New Tag</h3>
-                            <div className="flex gap-3">
+                            <div className="flex flex-col sm:flex-row gap-3">
                                 <input
                                     type="text"
                                     value={newTagName}
@@ -1479,7 +1479,7 @@ Respond ONLY with a JSON array in this exact format (no markdown, no preamble):
                                 />
                                 <button
                                     onClick={handleAddTag}
-                                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700"
+                                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 whitespace-nowrap"
                                 >
                                     Add Tag
                                 </button>
