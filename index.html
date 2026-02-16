@@ -427,7 +427,13 @@
                                     scheduleWebinar(selectedIdea.id, date);
                                     setCurrentView('calendar');
                                 }}
-                                onBack={() => setCurrentView('all-ideas')}
+                                onBack={() => {
+                                    if (window.deleteCurrentIdea) {
+                                        deleteIdea(selectedIdea.id);
+                                        window.deleteCurrentIdea = false;
+                                    }
+                                    setCurrentView('all-ideas');
+                                }}
                             />
                         )}
                         {currentView === 'ai-generator' && (
@@ -1048,6 +1054,10 @@
             const [notes, setNotes] = useState(idea.notes || '');
             const [tags, setTags] = useState(idea.tags || []);
             const [newTag, setNewTag] = useState('');
+            const [showChatWithClaude, setShowChatWithClaude] = useState(false);
+            const [chatPrompt, setChatPrompt] = useState('');
+            const [chatResponse, setChatResponse] = useState('');
+            const [isGenerating, setIsGenerating] = useState(false);
 
             const handleSave = () => {
                 onUpdate({
@@ -1081,6 +1091,52 @@
                 }
             };
 
+            const handleDelete = () => {
+                if (confirm(`Delete "${idea.title}"? This cannot be undone.`)) {
+                    // We need to pass this up through props
+                    window.deleteCurrentIdea = true;
+                    onBack();
+                }
+            };
+
+            const handleChatWithClaude = async () => {
+                if (!chatPrompt.trim()) return;
+
+                setIsGenerating(true);
+                try {
+                    const context = `
+Webinar Idea: ${title}
+Description: ${description}
+Current Notes: ${notes}
+Tags: ${tags.join(', ')}
+
+User Question: ${chatPrompt}`;
+
+                    const response = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            model: 'claude-sonnet-4-20250514',
+                            max_tokens: 2000,
+                            messages: [{
+                                role: 'user',
+                                content: `You're helping David Farr develop a webinar for his "Amazing Mago Monthly Mastery" series. Here's the webinar he's working on:\n\n${context}\n\nProvide helpful suggestions, outline ideas, talking points, or whatever he's asking for.`
+                            }]
+                        })
+                    });
+
+                    const data = await response.json();
+                    const textContent = data.content.find(item => item.type === 'text')?.text || '';
+                    setChatResponse(textContent);
+                } catch (err) {
+                    setChatResponse('Error: Failed to connect to Claude. Please try again.');
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
             return (
                 <div className="max-w-4xl mx-auto">
                     <div className="bg-white rounded-xl shadow-lg p-8">
@@ -1092,6 +1148,12 @@
                                 ← Back to All Ideas
                             </button>
                             <div className="flex gap-2">
+                                <button
+                                    onClick={() => setShowChatWithClaude(!showChatWithClaude)}
+                                    className="bg-purple-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-purple-700"
+                                >
+                                    💬 Chat with Claude
+                                </button>
                                 <button
                                     onClick={handleSave}
                                     className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700"
@@ -1106,8 +1168,42 @@
                                         📅 Schedule
                                     </button>
                                 )}
+                                <button
+                                    onClick={handleDelete}
+                                    className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-700"
+                                >
+                                    🗑️ Delete
+                                </button>
                             </div>
                         </div>
+
+                        {showChatWithClaude && (
+                            <div className="mb-6 p-6 bg-purple-50 border-2 border-purple-200 rounded-xl">
+                                <h3 className="text-xl font-bold mb-4">💬 Ask Claude About This Webinar</h3>
+                                <div className="space-y-4">
+                                    <textarea
+                                        value={chatPrompt}
+                                        onChange={(e) => setChatPrompt(e.target.value)}
+                                        placeholder="Ask Claude anything about this webinar... e.g., 'Help me create an outline' or 'What examples should I use?' or 'Suggest talking points'"
+                                        rows="3"
+                                        className="w-full px-4 py-3 border border-purple-300 rounded-lg"
+                                    />
+                                    <button
+                                        onClick={handleChatWithClaude}
+                                        disabled={isGenerating || !chatPrompt.trim()}
+                                        className="bg-purple-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-purple-700 disabled:opacity-50"
+                                    >
+                                        {isGenerating ? '🤔 Thinking...' : 'Ask Claude'}
+                                    </button>
+                                    {chatResponse && (
+                                        <div className="mt-4 p-4 bg-white border border-purple-200 rounded-lg">
+                                            <div className="text-sm text-gray-600 mb-2 font-semibold">Claude's Response:</div>
+                                            <div className="whitespace-pre-wrap text-gray-800">{chatResponse}</div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="space-y-6">
                             <div>
