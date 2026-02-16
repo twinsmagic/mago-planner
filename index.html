@@ -226,11 +226,19 @@
             };
 
             const saveData = async (newIdeas, newWebinars, newTags) => {
+                // Safety check: Don't save if ideas array is empty (prevents accidental wipes)
+                const ideasToSave = newIdeas || ideas;
+                if (ideasToSave.length === 0) {
+                    console.warn('Refusing to save empty ideas array - this would wipe all data');
+                    setSyncError('Safety check: Cannot save empty data. Please refresh and try again.');
+                    return;
+                }
+                
                 setIsSaving(true);
                 setSyncError(null);
                 try {
                     await Promise.all([
-                        sheetsAPI.saveIdeas(newIdeas || ideas),
+                        sheetsAPI.saveIdeas(ideasToSave),
                         sheetsAPI.saveWebinars(newWebinars || scheduledWebinars),
                         sheetsAPI.saveTags(newTags || availableTags)
                     ]);
@@ -1060,13 +1068,14 @@
             const [isGenerating, setIsGenerating] = useState(false);
 
             const handleSave = () => {
-                onUpdate({
+                const updates = {
                     title,
                     description,
                     notes,
                     tags,
                     status: idea.status === 'idea' ? 'developing' : idea.status
-                });
+                };
+                onUpdate(updates);
                 alert('Idea updated and synced!');
             };
 
