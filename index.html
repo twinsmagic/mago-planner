@@ -1112,25 +1112,28 @@ Tags: ${tags.join(', ')}
 
 User Question: ${chatPrompt}`;
 
-                    const response = await fetch('https://api.anthropic.com/v1/messages', {
+                    const fullPrompt = `You're helping David Farr develop a webinar for his "Amazing Mago Monthly Mastery" series. Here's the webinar he's working on:\n\n${context}\n\nProvide helpful suggestions, outline ideas, talking points, or whatever he's asking for.`;
+
+                    const url = `${APPS_SCRIPT_URL}`;
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'callClaude');
+                    formData.append('prompt', fullPrompt);
+
+                    const response = await fetch(url, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            model: 'claude-sonnet-4-20250514',
-                            max_tokens: 2000,
-                            messages: [{
-                                role: 'user',
-                                content: `You're helping David Farr develop a webinar for his "Amazing Mago Monthly Mastery" series. Here's the webinar he's working on:\n\n${context}\n\nProvide helpful suggestions, outline ideas, talking points, or whatever he's asking for.`
-                            }]
-                        })
+                        body: formData
                     });
 
                     const data = await response.json();
-                    const textContent = data.content.find(item => item.type === 'text')?.text || '';
-                    setChatResponse(textContent);
+                    
+                    if (data.error) {
+                        setChatResponse('Error: ' + data.error);
+                    } else {
+                        const textContent = data.content?.find(item => item.type === 'text')?.text || 'No response generated.';
+                        setChatResponse(textContent);
+                    }
                 } catch (err) {
+                    console.error('Chat error:', err);
                     setChatResponse('Error: Failed to connect to Claude. Please try again.');
                 } finally {
                     setIsGenerating(false);
@@ -1299,17 +1302,7 @@ User Question: ${chatPrompt}`;
                 setError('');
 
                 try {
-                    const response = await fetch('https://api.anthropic.com/v1/messages', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            model: 'claude-sonnet-4-20250514',
-                            max_tokens: 1000,
-                            messages: [{
-                                role: 'user',
-                                content: `You are helping David Farr, the Marketing Automation Wizard, come up with webinar ideas for his "Amazing Mago Monthly Mastery" series. Mago is a marketing automation CRM specifically for magicians and performers.
+                    const fullPrompt = `You are helping David Farr, the Marketing Automation Wizard, come up with webinar ideas for his "Amazing Mago Monthly Mastery" series. Mago is a marketing automation CRM specifically for magicians and performers.
 
 Context: ${prompt}
 
@@ -1321,13 +1314,26 @@ Respond ONLY with a JSON array in this exact format (no markdown, no preamble):
     "title": "Webinar title here",
     "description": "2-3 sentence description of what this webinar would cover"
   }
-]`
-                            }]
-                        })
+]`;
+
+                    const url = `${APPS_SCRIPT_URL}`;
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'callClaude');
+                    formData.append('prompt', fullPrompt);
+
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        body: formData
                     });
 
                     const data = await response.json();
-                    const textContent = data.content.find(item => item.type === 'text')?.text || '';
+                    
+                    if (data.error) {
+                        setError('Failed to generate ideas: ' + data.error);
+                        return;
+                    }
+
+                    const textContent = data.content?.find(item => item.type === 'text')?.text || '';
                     
                     // Clean up any markdown backticks
                     const cleanText = textContent.replace(/```json|```/g, '').trim();
