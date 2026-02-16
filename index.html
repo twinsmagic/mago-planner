@@ -134,6 +134,34 @@
 
                 if (!response.ok) throw new Error('Failed to save webinars');
                 return await response.json();
+            },
+
+            async getTags() {
+                const url = `${APPS_SCRIPT_URL}?action=getTags`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Failed to fetch tags');
+                
+                const rows = await response.json();
+                
+                if (rows.length === 0) return [];
+                
+                // Convert rows to simple array of tag names
+                return rows.map(row => row[0]).filter(tag => tag);
+            },
+
+            async saveTags(tags) {
+                const url = `${APPS_SCRIPT_URL}`;
+                const formData = new URLSearchParams();
+                formData.append('action', 'saveTags');
+                formData.append('data', JSON.stringify(tags));
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Failed to save tags');
+                return await response.json();
             }
         };
 
@@ -170,21 +198,23 @@
                 setIsLoading(true);
                 setSyncError(null);
                 try {
-                    const [loadedIdeas, loadedWebinars] = await Promise.all([
+                    const [loadedIdeas, loadedWebinars, loadedTags] = await Promise.all([
                         sheetsAPI.getIdeas(),
-                        sheetsAPI.getWebinars()
+                        sheetsAPI.getWebinars(),
+                        sheetsAPI.getTags()
                     ]);
                     setIdeas(loadedIdeas);
                     setScheduledWebinars(loadedWebinars);
                     
-                    // Extract all unique tags from ideas
-                    const allTags = new Set(DEFAULT_TAGS);
+                    // Combine saved tags with default tags and tags from ideas
+                    const allTags = new Set([...DEFAULT_TAGS, ...loadedTags]);
                     loadedIdeas.forEach(idea => {
                         if (idea.tags) {
                             idea.tags.forEach(tag => allTags.add(tag));
                         }
                     });
-                    setAvailableTags(Array.from(allTags).sort());
+                    const sortedTags = Array.from(allTags).sort();
+                    setAvailableTags(sortedTags);
                     
                     setLastSync(new Date());
                 } catch (error) {
@@ -195,13 +225,14 @@
                 }
             };
 
-            const saveData = async (newIdeas, newWebinars) => {
+            const saveData = async (newIdeas, newWebinars, newTags) => {
                 setIsSaving(true);
                 setSyncError(null);
                 try {
                     await Promise.all([
                         sheetsAPI.saveIdeas(newIdeas || ideas),
-                        sheetsAPI.saveWebinars(newWebinars || scheduledWebinars)
+                        sheetsAPI.saveWebinars(newWebinars || scheduledWebinars),
+                        sheetsAPI.saveTags(newTags || availableTags)
                     ]);
                     setLastSync(new Date());
                 } catch (error) {
@@ -223,13 +254,15 @@
                 setIdeas(newIdeas);
                 
                 // Update available tags
+                let updatedTags = availableTags;
                 if (idea.tags) {
                     const allTags = new Set(availableTags);
                     idea.tags.forEach(tag => allTags.add(tag));
-                    setAvailableTags(Array.from(allTags).sort());
+                    updatedTags = Array.from(allTags).sort();
+                    setAvailableTags(updatedTags);
                 }
                 
-                saveData(newIdeas, scheduledWebinars);
+                saveData(newIdeas, scheduledWebinars, updatedTags);
             };
 
             const updateIdea = (id, updates) => {
@@ -239,13 +272,15 @@
                 setIdeas(newIdeas);
                 
                 // Update available tags if tags were changed
+                let updatedTags = availableTags;
                 if (updates.tags) {
                     const allTags = new Set(availableTags);
                     updates.tags.forEach(tag => allTags.add(tag));
-                    setAvailableTags(Array.from(allTags).sort());
+                    updatedTags = Array.from(allTags).sort();
+                    setAvailableTags(updatedTags);
                 }
                 
-                saveData(newIdeas, scheduledWebinars);
+                saveData(newIdeas, scheduledWebinars, updatedTags);
             };
 
             const deleteIdea = (id) => {
@@ -302,9 +337,10 @@
                     setIdeas(newIdeas);
                     
                     // Remove from available tags
-                    setAvailableTags(availableTags.filter(t => t !== tagToDelete));
+                    const updatedTags = availableTags.filter(t => t !== tagToDelete);
+                    setAvailableTags(updatedTags);
                     
-                    saveData(newIdeas, scheduledWebinars);
+                    saveData(newIdeas, scheduledWebinars, updatedTags);
                 }
             };
 
@@ -422,7 +458,9 @@
                                 onDeleteTag={deleteTag}
                                 onAddTag={(newTag) => {
                                     if (!availableTags.includes(newTag)) {
-                                        setAvailableTags([...availableTags, newTag].sort());
+                                        const updatedTags = [...availableTags, newTag].sort();
+                                        setAvailableTags(updatedTags);
+                                        saveData(ideas, scheduledWebinars, updatedTags);
                                     }
                                 }}
                                 setCurrentView={setCurrentView}
@@ -1409,7 +1447,7 @@ Respond ONLY with a JSON array in this exact format (no markdown, no preamble):
                 if (newTagName.trim() && !availableTags.includes(newTagName.trim())) {
                     onAddTag(newTagName.trim());
                     setNewTagName('');
-                    alert('Tag added! It will now appear in Quick Capture and Develop Idea.');
+                    alert('Tag added and synced! It will now appear everywhere.');
                 } else if (availableTags.includes(newTagName.trim())) {
                     alert('This tag already exists!');
                 }
