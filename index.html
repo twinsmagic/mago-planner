@@ -137,6 +137,19 @@
             }
         };
 
+        // Default tags
+        const DEFAULT_TAGS = [
+            'Mago CRM',
+            'Email Marketing',
+            'SEO',
+            'Google Ads',
+            'Copywriting',
+            'Show Booking',
+            'Feature Release',
+            'Sales',
+            'Automation'
+        ];
+
         function App() {
             const [ideas, setIdeas] = useState([]);
             const [scheduledWebinars, setScheduledWebinars] = useState([]);
@@ -146,6 +159,7 @@
             const [isSaving, setIsSaving] = useState(false);
             const [lastSync, setLastSync] = useState(null);
             const [syncError, setSyncError] = useState(null);
+            const [availableTags, setAvailableTags] = useState(DEFAULT_TAGS);
 
             // Load data on mount
             useEffect(() => {
@@ -162,6 +176,16 @@
                     ]);
                     setIdeas(loadedIdeas);
                     setScheduledWebinars(loadedWebinars);
+                    
+                    // Extract all unique tags from ideas
+                    const allTags = new Set(DEFAULT_TAGS);
+                    loadedIdeas.forEach(idea => {
+                        if (idea.tags) {
+                            idea.tags.forEach(tag => allTags.add(tag));
+                        }
+                    });
+                    setAvailableTags(Array.from(allTags).sort());
+                    
                     setLastSync(new Date());
                 } catch (error) {
                     console.error('Error loading data:', error);
@@ -197,6 +221,14 @@
                 };
                 const newIdeas = [newIdea, ...ideas];
                 setIdeas(newIdeas);
+                
+                // Update available tags
+                if (idea.tags) {
+                    const allTags = new Set(availableTags);
+                    idea.tags.forEach(tag => allTags.add(tag));
+                    setAvailableTags(Array.from(allTags).sort());
+                }
+                
                 saveData(newIdeas, scheduledWebinars);
             };
 
@@ -205,6 +237,14 @@
                     idea.id === id ? { ...idea, ...updates } : idea
                 );
                 setIdeas(newIdeas);
+                
+                // Update available tags if tags were changed
+                if (updates.tags) {
+                    const allTags = new Set(availableTags);
+                    updates.tags.forEach(tag => allTags.add(tag));
+                    setAvailableTags(Array.from(allTags).sort());
+                }
+                
                 saveData(newIdeas, scheduledWebinars);
             };
 
@@ -230,18 +270,42 @@
                 };
                 const newWebinars = [...scheduledWebinars, newWebinar];
                 setScheduledWebinars(newWebinars);
-                updateIdea(ideaId, { status: 'scheduled' });
-                saveData(ideas, newWebinars);
+                
+                const newIdeas = ideas.map(i => 
+                    i.id === ideaId ? { ...i, status: 'scheduled' } : i
+                );
+                setIdeas(newIdeas);
+                
+                saveData(newIdeas, newWebinars);
             };
 
             const unscheduleWebinar = (webinarId) => {
                 const webinar = scheduledWebinars.find(w => w.id === webinarId);
                 if (webinar) {
-                    updateIdea(webinar.ideaId, { status: 'developing' });
+                    const newIdeas = ideas.map(i =>
+                        i.id === webinar.ideaId ? { ...i, status: 'developing' } : i
+                    );
+                    setIdeas(newIdeas);
                 }
                 const newWebinars = scheduledWebinars.filter(w => w.id !== webinarId);
                 setScheduledWebinars(newWebinars);
                 saveData(ideas, newWebinars);
+            };
+
+            const deleteTag = (tagToDelete) => {
+                if (confirm(`Remove "${tagToDelete}" from all ideas? This cannot be undone.`)) {
+                    // Remove tag from all ideas
+                    const newIdeas = ideas.map(idea => ({
+                        ...idea,
+                        tags: idea.tags ? idea.tags.filter(t => t !== tagToDelete) : []
+                    }));
+                    setIdeas(newIdeas);
+                    
+                    // Remove from available tags
+                    setAvailableTags(availableTags.filter(t => t !== tagToDelete));
+                    
+                    saveData(newIdeas, scheduledWebinars);
+                }
             };
 
             if (isLoading) {
@@ -293,14 +357,16 @@
                             />
                         )}
                         {currentView === 'quick-capture' && (
-                            <QuickCapture onAdd={addIdea} setCurrentView={setCurrentView} />
-                        )}
-                        {currentView === 'brainstorm' && (
-                            <BrainstormMode onAdd={addIdea} setCurrentView={setCurrentView} />
+                            <QuickCapture 
+                                onAdd={addIdea} 
+                                setCurrentView={setCurrentView}
+                                availableTags={availableTags}
+                            />
                         )}
                         {currentView === 'all-ideas' && (
                             <AllIdeas 
                                 ideas={ideas} 
+                                availableTags={availableTags}
                                 onSelect={(idea) => {
                                     setSelectedIdea(idea);
                                     setCurrentView('develop');
@@ -319,6 +385,7 @@
                         {currentView === 'develop' && selectedIdea && (
                             <DevelopIdea 
                                 idea={selectedIdea}
+                                availableTags={availableTags}
                                 onUpdate={(updates) => updateIdea(selectedIdea.id, updates)}
                                 onSchedule={(date) => {
                                     scheduleWebinar(selectedIdea.id, date);
@@ -328,7 +395,11 @@
                             />
                         )}
                         {currentView === 'ai-generator' && (
-                            <AIGenerator onAdd={addIdea} setCurrentView={setCurrentView} />
+                            <AIGenerator 
+                                onAdd={addIdea} 
+                                setCurrentView={setCurrentView}
+                                availableTags={availableTags}
+                            />
                         )}
                         {currentView === 'import' && (
                             <BulkImport onImport={(importedIdeas) => {
@@ -344,6 +415,18 @@
                                 alert(`Successfully imported ${importedIdeas.length} ideas!`);
                                 setCurrentView('all-ideas');
                             }} setCurrentView={setCurrentView} />
+                        )}
+                        {currentView === 'manage-tags' && (
+                            <ManageTags 
+                                availableTags={availableTags}
+                                onDeleteTag={deleteTag}
+                                onAddTag={(newTag) => {
+                                    if (!availableTags.includes(newTag)) {
+                                        setAvailableTags([...availableTags, newTag].sort());
+                                    }
+                                }}
+                                setCurrentView={setCurrentView}
+                            />
                         )}
                     </div>
                 </div>
@@ -426,13 +509,6 @@
                                 color="blue"
                             />
                             <ActionButton
-                                icon="brain"
-                                title="Guided Brainstorm"
-                                description="Use proven prompts"
-                                onClick={() => setCurrentView('brainstorm')}
-                                color="purple"
-                            />
-                            <ActionButton
                                 icon="robot"
                                 title="AI Generator"
                                 description="Let Claude help you"
@@ -445,6 +521,13 @@
                                 description="Load multiple ideas"
                                 onClick={() => setCurrentView('import')}
                                 color="orange"
+                            />
+                            <ActionButton
+                                icon="tags"
+                                title="Manage Tags"
+                                description="Add or remove tags"
+                                onClick={() => setCurrentView('manage-tags')}
+                                color="purple"
                             />
                         </div>
                     </div>
@@ -568,28 +651,12 @@
             );
         }
 
-        // Include all other component functions from the original app
-        // (QuickCapture, BrainstormMode, AllIdeas, Calendar, DevelopIdea, AIGenerator, BulkImport)
-        // For brevity, I'll include just the key ones that changed...
-
-        function QuickCapture({ onAdd, setCurrentView }) {
+        function QuickCapture({ onAdd, setCurrentView, availableTags }) {
             const [title, setTitle] = useState('');
             const [description, setDescription] = useState('');
             const [source, setSource] = useState('');
             const [tags, setTags] = useState([]);
             const [newTag, setNewTag] = useState('');
-
-            const availableTags = [
-                'Mago CRM',
-                'Email Marketing',
-                'SEO',
-                'Google Ads',
-                'Copywriting',
-                'Show Booking',
-                'Feature Release',
-                'Sales',
-                'Automation'
-            ];
 
             const handleSubmit = (e) => {
                 e.preventDefault();
@@ -671,6 +738,7 @@
                                     <option value="Aha Moment">Aha Moment</option>
                                     <option value="Feature Release">Feature Release</option>
                                     <option value="Student Feedback">Student Feedback</option>
+                                    <option value="Post-Webinar Survey">Post-Webinar Survey</option>
                                     <option value="Other">Other</option>
                                 </select>
                             </div>
@@ -724,44 +792,518 @@
             );
         }
 
-        // Placeholder for other components - in production, include all components from original
-        function BrainstormMode({ onAdd, setCurrentView }) {
-            return <div className="text-center p-12">Brainstorm Mode - Coming Soon</div>;
-        }
+        function AllIdeas({ ideas, availableTags, onSelect, onDelete }) {
+            const [filter, setFilter] = useState('all');
+            const [searchTerm, setSearchTerm] = useState('');
+            const [selectedTag, setSelectedTag] = useState('all');
 
-        function AllIdeas({ ideas, onSelect, onDelete }) {
+            const filteredIdeas = ideas.filter(idea => {
+                const matchesFilter = filter === 'all' || idea.status === filter;
+                const matchesSearch = !searchTerm || 
+                    idea.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    idea.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    idea.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+                const matchesTag = selectedTag === 'all' || idea.tags?.includes(selectedTag);
+                return matchesFilter && matchesSearch && matchesTag;
+            });
+
             return (
                 <div>
                     <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                        <h2 className="text-3xl font-bold mb-4">All Ideas ({ideas.length})</h2>
+                        <h2 className="text-3xl font-bold mb-6">All Ideas ({ideas.length})</h2>
+                        
+                        <div className="flex flex-col md:flex-row gap-4 mb-4">
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Search ideas..."
+                                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                            />
+                            <select
+                                value={filter}
+                                onChange={(e) => setFilter(e.target.value)}
+                                className="px-4 py-2 border border-gray-300 rounded-lg"
+                            >
+                                <option value="all">All Status</option>
+                                <option value="idea">Raw Ideas</option>
+                                <option value="developing">Developing</option>
+                                <option value="scheduled">Scheduled</option>
+                                <option value="delivered">Delivered</option>
+                            </select>
+                            <select
+                                value={selectedTag}
+                                onChange={(e) => setSelectedTag(e.target.value)}
+                                className="px-4 py-2 border border-gray-300 rounded-lg"
+                            >
+                                <option value="all">All Tags</option>
+                                {availableTags.map(tag => (
+                                    <option key={tag} value={tag}>{tag}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
+
                     <div className="space-y-4">
-                        {ideas.map(idea => (
-                            <div key={idea.id} className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition cursor-pointer" onClick={() => onSelect(idea)}>
-                                <h3 className="text-xl font-bold">{idea.title}</h3>
-                                <p className="text-gray-600 mt-2">{idea.description?.substring(0, 150)}...</p>
-                                <div className="flex gap-2 mt-3">
-                                    {idea.tags?.map(tag => (
-                                        <span key={tag} className="bg-gray-200 px-3 py-1 rounded-full text-xs">{tag}</span>
-                                    ))}
-                                </div>
+                        {filteredIdeas.length === 0 ? (
+                            <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                                <p className="text-gray-500 text-lg">No ideas found</p>
                             </div>
-                        ))}
+                        ) : (
+                            filteredIdeas.map(idea => (
+                                <div key={idea.id} className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex-1 cursor-pointer" onClick={() => onSelect(idea)}>
+                                            <h3 className="text-xl font-bold mb-2">{idea.title}</h3>
+                                            {idea.description && (
+                                                <p className="text-gray-600 mb-3">{idea.description.substring(0, 150)}...</p>
+                                            )}
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                    idea.status === 'idea' ? 'bg-blue-100 text-blue-600' :
+                                                    idea.status === 'developing' ? 'bg-orange-100 text-orange-600' :
+                                                    idea.status === 'scheduled' ? 'bg-green-100 text-green-600' :
+                                                    'bg-purple-100 text-purple-600'
+                                                }`}>
+                                                    {idea.status}
+                                                </span>
+                                                {idea.source && (
+                                                    <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs">
+                                                        {idea.source}
+                                                    </span>
+                                                )}
+                                                {idea.tags?.map(tag => (
+                                                    <span key={tag} className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-xs">
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDelete(idea.id);
+                                            }}
+                                            className="ml-4 text-red-500 hover:text-red-700"
+                                        >
+                                            <i className="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             );
         }
 
         function Calendar({ ideas, scheduledWebinars, onSchedule, onUnschedule }) {
-            return <div className="text-center p-12">Calendar View - Coming Soon</div>;
+            const [selectedMonth, setSelectedMonth] = useState(0);
+            
+            const getMonthInfo = (offset) => {
+                const date = new Date();
+                date.setMonth(date.getMonth() + offset);
+                return {
+                    name: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+                    year: date.getFullYear(),
+                    month: date.getMonth()
+                };
+            };
+
+            const unscheduledIdeas = ideas.filter(idea => idea.status !== 'scheduled' && idea.status !== 'delivered');
+            const months = [0, 1, 2].map(getMonthInfo);
+
+            const getWebinarsForMonth = (monthInfo) => {
+                return scheduledWebinars.filter(webinar => {
+                    const webinarDate = new Date(webinar.date);
+                    return webinarDate.getMonth() === monthInfo.month && 
+                           webinarDate.getFullYear() === monthInfo.year;
+                }).sort((a, b) => new Date(a.date) - new Date(b.date));
+            };
+
+            return (
+                <div>
+                    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <h2 className="text-3xl font-bold mb-4">📅 3-Month Webinar Calendar</h2>
+                        <p className="text-gray-600">
+                            Click an idea to schedule it, or click a scheduled webinar to unschedule.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                        {/* Unscheduled Ideas */}
+                        <div className="bg-white rounded-xl shadow-lg p-6">
+                            <h3 className="text-xl font-bold mb-4">Unscheduled Ideas ({unscheduledIdeas.length})</h3>
+                            <div className="space-y-3 max-h-96 overflow-y-auto">
+                                {unscheduledIdeas.map(idea => (
+                                    <div
+                                        key={idea.id}
+                                        className="p-3 bg-blue-50 border-2 border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition"
+                                        onClick={() => {
+                                            const date = prompt('Schedule for date (YYYY-MM-DD):');
+                                            if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                                                onSchedule(idea.id, date);
+                                            } else if (date) {
+                                                alert('Invalid date format. Please use YYYY-MM-DD');
+                                            }
+                                        }}
+                                    >
+                                        <div className="font-semibold text-sm">{idea.title}</div>
+                                        <div className="text-xs text-gray-600 mt-1">
+                                            {idea.tags?.slice(0, 2).join(', ')}
+                                        </div>
+                                    </div>
+                                ))}
+                                {unscheduledIdeas.length === 0 && (
+                                    <p className="text-gray-500 text-sm italic">All ideas scheduled!</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Three Month Columns */}
+                        {months.map((monthInfo, index) => {
+                            const webinars = getWebinarsForMonth(monthInfo);
+                            return (
+                                <div key={index} className="bg-white rounded-xl shadow-lg p-6">
+                                    <h3 className="text-xl font-bold mb-4">{monthInfo.name}</h3>
+                                    <div className="space-y-3">
+                                        {webinars.map(webinar => (
+                                            <div
+                                                key={webinar.id}
+                                                className="p-3 bg-green-50 border-2 border-green-300 rounded-lg"
+                                            >
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <div className="font-semibold text-sm flex-1">{webinar.title}</div>
+                                                    <button
+                                                        onClick={() => onUnschedule(webinar.id)}
+                                                        className="text-red-500 hover:text-red-700 text-xs ml-2"
+                                                    >
+                                                        <i className="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                                <div className="text-xs text-gray-600">
+                                                    {new Date(webinar.date).toLocaleDateString('en-US', { 
+                                                        month: 'short', 
+                                                        day: 'numeric' 
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {webinars.length === 0 && (
+                                            <div className="text-center py-8 text-gray-400">
+                                                <i className="fas fa-calendar-plus text-3xl mb-2"></i>
+                                                <p className="text-sm">No webinars scheduled</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
         }
 
-        function DevelopIdea({ idea, onUpdate, onSchedule, onBack }) {
-            return <div className="text-center p-12">Develop Idea - Coming Soon</div>;
+        function DevelopIdea({ idea, availableTags, onUpdate, onSchedule, onBack }) {
+            const [title, setTitle] = useState(idea.title);
+            const [description, setDescription] = useState(idea.description || '');
+            const [notes, setNotes] = useState(idea.notes || '');
+            const [tags, setTags] = useState(idea.tags || []);
+            const [newTag, setNewTag] = useState('');
+
+            const handleSave = () => {
+                onUpdate({
+                    title,
+                    description,
+                    notes,
+                    tags,
+                    status: idea.status === 'idea' ? 'developing' : idea.status
+                });
+                alert('Idea updated and synced!');
+            };
+
+            const toggleTag = (tag) => {
+                setTags(tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag]);
+            };
+
+            const addCustomTag = () => {
+                if (newTag.trim() && !tags.includes(newTag.trim())) {
+                    setTags([...tags, newTag.trim()]);
+                    setNewTag('');
+                }
+            };
+
+            const handleSchedule = () => {
+                const date = prompt('Enter webinar date (YYYY-MM-DD):');
+                if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                    handleSave(); // Save first
+                    onSchedule(date);
+                } else if (date) {
+                    alert('Invalid date format. Please use YYYY-MM-DD');
+                }
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto">
+                    <div className="bg-white rounded-xl shadow-lg p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <button
+                                onClick={onBack}
+                                className="text-blue-600 hover:text-blue-700 font-semibold"
+                            >
+                                ← Back to All Ideas
+                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleSave}
+                                    className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700"
+                                >
+                                    💾 Save
+                                </button>
+                                {idea.status !== 'scheduled' && (
+                                    <button
+                                        onClick={handleSchedule}
+                                        className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-700"
+                                    >
+                                        📅 Schedule
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Webinar Title</label>
+                                <input
+                                    type="text"
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-xl font-bold"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Description / Overview</label>
+                                <textarea
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    rows="4"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg"
+                                    placeholder="What's this webinar about? Key points to cover..."
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Development Notes & Outline</label>
+                                <textarea
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    rows="12"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg font-mono text-sm"
+                                    placeholder="Outline, talking points, examples to use, demos to show..."
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold mb-2">Tags</label>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    {availableTags.map(tag => (
+                                        <button
+                                            key={tag}
+                                            type="button"
+                                            onClick={() => toggleTag(tag)}
+                                            className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                                                tags.includes(tag)
+                                                    ? 'bg-blue-500 text-white'
+                                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                            }`}
+                                        >
+                                            {tag}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newTag}
+                                        onChange={(e) => setNewTag(e.target.value)}
+                                        placeholder="Add custom tag..."
+                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomTag())}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={addCustomTag}
+                                        className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="border-t pt-6">
+                                <div className="text-sm text-gray-600">
+                                    <div><strong>Source:</strong> {idea.source || 'Not specified'}</div>
+                                    <div><strong>Created:</strong> {new Date(idea.createdAt).toLocaleDateString()}</div>
+                                    <div><strong>Status:</strong> {idea.status}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
         }
 
-        function AIGenerator({ onAdd, setCurrentView }) {
-            return <div className="text-center p-12">AI Generator - Coming Soon</div>;
+        function AIGenerator({ onAdd, setCurrentView, availableTags }) {
+            const [prompt, setPrompt] = useState('');
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [generatedIdeas, setGeneratedIdeas] = useState([]);
+            const [error, setError] = useState('');
+
+            const handleGenerate = async () => {
+                if (!prompt.trim()) return;
+
+                setIsGenerating(true);
+                setError('');
+
+                try {
+                    const response = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            model: 'claude-sonnet-4-20250514',
+                            max_tokens: 1000,
+                            messages: [{
+                                role: 'user',
+                                content: `You are helping David Farr, the Marketing Automation Wizard, come up with webinar ideas for his "Amazing Mago Monthly Mastery" series. Mago is a marketing automation CRM specifically for magicians and performers.
+
+Context: ${prompt}
+
+Generate 5 specific webinar topic ideas that would be valuable for magicians using the Mago CRM. Each idea should be actionable and focused on helping them book more shows or use Mago more effectively.
+
+Respond ONLY with a JSON array in this exact format (no markdown, no preamble):
+[
+  {
+    "title": "Webinar title here",
+    "description": "2-3 sentence description of what this webinar would cover"
+  }
+]`
+                            }]
+                        })
+                    });
+
+                    const data = await response.json();
+                    const textContent = data.content.find(item => item.type === 'text')?.text || '';
+                    
+                    // Clean up any markdown backticks
+                    const cleanText = textContent.replace(/```json|```/g, '').trim();
+                    const ideas = JSON.parse(cleanText);
+
+                    const formattedIdeas = ideas.map(idea => ({
+                        ...idea,
+                        source: 'AI Generated',
+                        tags: ['AI Generated', 'Mago CRM']
+                    }));
+
+                    setGeneratedIdeas(formattedIdeas);
+                } catch (err) {
+                    console.error('AI Generation error:', err);
+                    setError('Failed to generate ideas. Please try again.');
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
+            const saveIdea = (idea) => {
+                onAdd(idea);
+                setGeneratedIdeas(generatedIdeas.filter(i => i !== idea));
+            };
+
+            const saveAllIdeas = () => {
+                generatedIdeas.forEach(idea => onAdd(idea));
+                alert(`${generatedIdeas.length} ideas saved!`);
+                setCurrentView('all-ideas');
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto">
+                    <div className="bg-white rounded-xl shadow-lg p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-3xl font-bold">🤖 AI Idea Generator</h2>
+                            <button
+                                onClick={() => setCurrentView('dashboard')}
+                                className="text-gray-600 hover:text-gray-800"
+                            >
+                                <i className="fas fa-times text-2xl"></i>
+                            </button>
+                        </div>
+
+                        <p className="text-gray-600 mb-6">
+                            Tell Claude what's on your mind, and get 5 tailored webinar ideas instantly.
+                        </p>
+
+                        <div className="mb-6">
+                            <label className="block text-sm font-semibold mb-2">What should Claude know?</label>
+                            <textarea
+                                value={prompt}
+                                onChange={(e) => setPrompt(e.target.value)}
+                                rows="6"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="e.g., We just released a new SMS automation feature. Inner Circle members keep asking about how to write better follow-up emails. I want to show them how to use the templates..."
+                            />
+                        </div>
+
+                        {error && (
+                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                                {error}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleGenerate}
+                            disabled={isGenerating || !prompt.trim()}
+                            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-4 rounded-lg font-bold text-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isGenerating ? '🎩 Claude is thinking...' : '✨ Generate Ideas with AI'}
+                        </button>
+
+                        {generatedIdeas.length > 0 && (
+                            <div className="mt-8">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-2xl font-bold">Generated Ideas</h3>
+                                    <button
+                                        onClick={saveAllIdeas}
+                                        className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700"
+                                    >
+                                        Save All
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    {generatedIdeas.map((idea, index) => (
+                                        <div key={index} className="border border-gray-200 rounded-lg p-4">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex-1">
+                                                    <h4 className="font-bold text-lg mb-2">{idea.title}</h4>
+                                                    <p className="text-gray-600 text-sm">{idea.description}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => saveIdea(idea)}
+                                                    className="ml-4 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
+                                                >
+                                                    Save
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
         }
 
         function BulkImport({ onImport, setCurrentView }) {
@@ -855,6 +1397,83 @@
                         >
                             {preview ? `Import & Sync ${preview.count} Ideas` : 'Paste JSON to Preview'}
                         </button>
+                    </div>
+                </div>
+            );
+        }
+
+        function ManageTags({ availableTags, onDeleteTag, onAddTag, setCurrentView }) {
+            const [newTagName, setNewTagName] = useState('');
+
+            const handleAddTag = () => {
+                if (newTagName.trim() && !availableTags.includes(newTagName.trim())) {
+                    onAddTag(newTagName.trim());
+                    setNewTagName('');
+                    alert('Tag added! It will now appear in Quick Capture and Develop Idea.');
+                } else if (availableTags.includes(newTagName.trim())) {
+                    alert('This tag already exists!');
+                }
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto">
+                    <div className="bg-white rounded-xl shadow-lg p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-3xl font-bold">🏷️ Manage Tags</h2>
+                            <button
+                                onClick={() => setCurrentView('dashboard')}
+                                className="text-gray-600 hover:text-gray-800"
+                            >
+                                <i className="fas fa-times text-2xl"></i>
+                            </button>
+                        </div>
+
+                        <div className="mb-8">
+                            <h3 className="text-xl font-bold mb-4">Add New Tag</h3>
+                            <div className="flex gap-3">
+                                <input
+                                    type="text"
+                                    value={newTagName}
+                                    onChange={(e) => setNewTagName(e.target.value)}
+                                    placeholder="New tag name..."
+                                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg"
+                                    onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
+                                />
+                                <button
+                                    onClick={handleAddTag}
+                                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700"
+                                >
+                                    Add Tag
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-xl font-bold mb-4">All Tags ({availableTags.length})</h3>
+                            <div className="flex flex-wrap gap-3">
+                                {availableTags.map(tag => (
+                                    <div
+                                        key={tag}
+                                        className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-lg"
+                                    >
+                                        <span className="font-medium">{tag}</span>
+                                        <button
+                                            onClick={() => onDeleteTag(tag)}
+                                            className="text-red-500 hover:text-red-700"
+                                            title="Remove this tag from all ideas"
+                                        >
+                                            <i className="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p className="text-sm text-yellow-800">
+                                <strong>Note:</strong> Deleting a tag will remove it from ALL ideas that currently use it. This action cannot be undone.
+                            </p>
+                        </div>
                     </div>
                 </div>
             );
