@@ -31,33 +31,17 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Google Sheets Configuration
-        const SHEET_ID = '1UZNVtJKaSAsPhCeP4QqrOCc34oTQTG5eU9bVS7cFakA';
-        const API_KEY = 'AIzaSyAXUOGDfkWj8QnNJL9Q4WWTYqABisS-WDY';
-        const IDEAS_SHEET = 'Ideas';
-        const WEBINARS_SHEET = 'Webinars';
+        // Apps Script Configuration
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwnAXtnYjxwx7n00C_n8otIPyFkOhlCo7HFB_fpF1VKrBmnMi4Ho5a4vavqTvSUERDt/exec';
 
-        // Google Sheets API Helper Functions
+        // Google Sheets Helper Functions via Apps Script
         const sheetsAPI = {
-            async initializeSheets() {
-                // Check if sheets exist, if not create them
-                try {
-                    await this.getIdeas();
-                } catch (error) {
-                    console.log('Initializing sheets...');
-                    // Sheets don't exist yet - they'll be created on first write
-                }
-            },
-
             async getIdeas() {
-                const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${IDEAS_SHEET}!A:J?key=${API_KEY}`;
+                const url = `${APPS_SCRIPT_URL}?action=getIdeas`;
                 const response = await fetch(url);
-                if (!response.ok) {
-                    if (response.status === 404) return [];
-                    throw new Error('Failed to fetch ideas');
-                }
-                const data = await response.json();
-                const rows = data.values || [];
+                if (!response.ok) throw new Error('Failed to fetch ideas');
+                
+                const rows = await response.json();
                 
                 if (rows.length <= 1) return []; // No data or just headers
                 
@@ -94,11 +78,14 @@
 
                 const values = [headers, ...rows];
                 
-                const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${IDEAS_SHEET}!A:J?valueInputOption=RAW&key=${API_KEY}`;
+                const url = `${APPS_SCRIPT_URL}`;
+                const formData = new URLSearchParams();
+                formData.append('action', 'saveIdeas');
+                formData.append('data', JSON.stringify(values));
+                
                 const response = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ values })
+                    method: 'POST',
+                    body: formData
                 });
 
                 if (!response.ok) throw new Error('Failed to save ideas');
@@ -106,14 +93,11 @@
             },
 
             async getWebinars() {
-                const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${WEBINARS_SHEET}!A:E?key=${API_KEY}`;
+                const url = `${APPS_SCRIPT_URL}?action=getWebinars`;
                 const response = await fetch(url);
-                if (!response.ok) {
-                    if (response.status === 404) return [];
-                    throw new Error('Failed to fetch webinars');
-                }
-                const data = await response.json();
-                const rows = data.values || [];
+                if (!response.ok) throw new Error('Failed to fetch webinars');
+                
+                const rows = await response.json();
                 
                 if (rows.length <= 1) return [];
                 
@@ -138,11 +122,14 @@
 
                 const values = [headers, ...rows];
                 
-                const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${WEBINARS_SHEET}!A:E?valueInputOption=RAW&key=${API_KEY}`;
+                const url = `${APPS_SCRIPT_URL}`;
+                const formData = new URLSearchParams();
+                formData.append('action', 'saveWebinars');
+                formData.append('data', JSON.stringify(values));
+                
                 const response = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ values })
+                    method: 'POST',
+                    body: formData
                 });
 
                 if (!response.ok) throw new Error('Failed to save webinars');
