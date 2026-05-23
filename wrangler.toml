@@ -1,0 +1,10 @@
+name = "mago-planner"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "."
+
+# Run locally with: npx wrangler pages dev . --kv PLANNER_KV
+# (KV is in-memory only during local dev; data resets on restart)
+[[kv_namespaces]]
+binding = "PLANNER_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_YOUR_PREVIEW_KV_NAMESPACE_ID"

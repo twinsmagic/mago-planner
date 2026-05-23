@@ -31,135 +31,51 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Apps Script Configuration
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwnAXtnYjxwx7n00C_n8otIPyFkOhlCo7HFB_fpF1VKrBmnMi4Ho5a4vavqTvSUERDt/exec';
+        // Cloudflare API
+        const API_URL = '/api';
 
-        // Google Sheets Helper Functions via Apps Script
         const sheetsAPI = {
             async getIdeas() {
-                const url = `${APPS_SCRIPT_URL}?action=getIdeas`;
-                const response = await fetch(url);
+                const response = await fetch(`${API_URL}?action=getIdeas`);
                 if (!response.ok) throw new Error('Failed to fetch ideas');
-                
-                const rows = await response.json();
-                
-                if (rows.length <= 1) return []; // No data or just headers
-                
-                // Convert rows to objects (skip header row)
-                return rows.slice(1).map(row => ({
-                    id: row[0] || '',
-                    title: row[1] || '',
-                    description: row[2] || '',
-                    source: row[3] || '',
-                    tags: row[4] ? JSON.parse(row[4]) : [],
-                    notes: row[5] || '',
-                    status: row[6] || 'idea',
-                    createdAt: row[7] || new Date().toISOString(),
-                    priority: row[8] || '',
-                    updatedAt: row[9] || new Date().toISOString()
-                })).filter(idea => idea.id); // Filter out empty rows
+                return await response.json();
             },
 
             async saveIdeas(ideas) {
-                // Prepare data with headers
-                const headers = ['ID', 'Title', 'Description', 'Source', 'Tags', 'Notes', 'Status', 'CreatedAt', 'Priority', 'UpdatedAt'];
-                const rows = ideas.map(idea => [
-                    idea.id,
-                    idea.title,
-                    idea.description || '',
-                    idea.source || '',
-                    JSON.stringify(idea.tags || []),
-                    idea.notes || '',
-                    idea.status || 'idea',
-                    idea.createdAt || new Date().toISOString(),
-                    idea.priority || '',
-                    new Date().toISOString()
-                ]);
-
-                const values = [headers, ...rows];
-                
-                const url = `${APPS_SCRIPT_URL}`;
                 const formData = new URLSearchParams();
                 formData.append('action', 'saveIdeas');
-                formData.append('data', JSON.stringify(values));
-                
-                const response = await fetch(url, {
-                    method: 'POST',
-                    body: formData
-                });
-
+                formData.append('data', JSON.stringify(ideas));
+                const response = await fetch(API_URL, { method: 'POST', body: formData });
                 if (!response.ok) throw new Error('Failed to save ideas');
                 return await response.json();
             },
 
             async getWebinars() {
-                const url = `${APPS_SCRIPT_URL}?action=getWebinars`;
-                const response = await fetch(url);
+                const response = await fetch(`${API_URL}?action=getWebinars`);
                 if (!response.ok) throw new Error('Failed to fetch webinars');
-                
-                const rows = await response.json();
-                
-                if (rows.length <= 1) return [];
-                
-                return rows.slice(1).map(row => ({
-                    id: row[0] || '',
-                    ideaId: row[1] || '',
-                    date: row[2] || '',
-                    title: row[3] || '',
-                    isFlexible: row[4] === 'true'
-                })).filter(webinar => webinar.id);
+                return await response.json();
             },
 
             async saveWebinars(webinars) {
-                const headers = ['ID', 'IdeaID', 'Date', 'Title', 'IsFlexible'];
-                const rows = webinars.map(w => [
-                    w.id,
-                    w.ideaId,
-                    w.date,
-                    w.title,
-                    w.isFlexible.toString()
-                ]);
-
-                const values = [headers, ...rows];
-                
-                const url = `${APPS_SCRIPT_URL}`;
                 const formData = new URLSearchParams();
                 formData.append('action', 'saveWebinars');
-                formData.append('data', JSON.stringify(values));
-                
-                const response = await fetch(url, {
-                    method: 'POST',
-                    body: formData
-                });
-
+                formData.append('data', JSON.stringify(webinars));
+                const response = await fetch(API_URL, { method: 'POST', body: formData });
                 if (!response.ok) throw new Error('Failed to save webinars');
                 return await response.json();
             },
 
             async getTags() {
-                const url = `${APPS_SCRIPT_URL}?action=getTags`;
-                const response = await fetch(url);
+                const response = await fetch(`${API_URL}?action=getTags`);
                 if (!response.ok) throw new Error('Failed to fetch tags');
-                
-                const rows = await response.json();
-                
-                if (rows.length === 0) return [];
-                
-                // Convert rows to simple array of tag names
-                return rows.map(row => row[0]).filter(tag => tag);
+                return await response.json();
             },
 
             async saveTags(tags) {
-                const url = `${APPS_SCRIPT_URL}`;
                 const formData = new URLSearchParams();
                 formData.append('action', 'saveTags');
                 formData.append('data', JSON.stringify(tags));
-                
-                const response = await fetch(url, {
-                    method: 'POST',
-                    body: formData
-                });
-
+                const response = await fetch(API_URL, { method: 'POST', body: formData });
                 if (!response.ok) throw new Error('Failed to save tags');
                 return await response.json();
             }
@@ -219,7 +135,7 @@
                     setLastSync(new Date());
                 } catch (error) {
                     console.error('Error loading data:', error);
-                    setSyncError('Failed to load data from Google Sheets. Check your connection.');
+                    setSyncError('Failed to load data. Check your connection.');
                 } finally {
                     setIsLoading(false);
                 }
@@ -245,7 +161,7 @@
                     setLastSync(new Date());
                 } catch (error) {
                     console.error('Error saving data:', error);
-                    setSyncError('Failed to save to Google Sheets. Your changes may not be saved.');
+                    setSyncError('Failed to save. Your changes may not be saved.');
                 } finally {
                     setIsSaving(false);
                 }
@@ -356,8 +272,8 @@
                 return (
                     <div className="min-h-screen flex items-center justify-center">
                         <div className="text-center">
-                            <div className="text-2xl text-gray-600 mb-4">Loading from Google Sheets...</div>
-                            <div className="text-sm text-gray-500">☁️ Syncing your content vault</div>
+                            <div className="text-2xl text-gray-600 mb-4">Loading your content...</div>
+                            <div className="text-sm text-gray-500">☁️ Syncing with Cloudflare</div>
                         </div>
                     </div>
                 );
@@ -467,7 +383,7 @@
                             }} setCurrentView={setCurrentView} />
                         )}
                         {currentView === 'manage-tags' && (
-                            <ManageTags 
+                            <ManageTags
                                 availableTags={availableTags}
                                 onDeleteTag={deleteTag}
                                 onAddTag={(newTag) => {
@@ -476,6 +392,19 @@
                                         setAvailableTags(updatedTags);
                                         saveData(ideas, scheduledWebinars, updatedTags);
                                     }
+                                }}
+                                setCurrentView={setCurrentView}
+                            />
+                        )}
+                        {currentView === 'migrate' && (
+                            <MigrateFromSheets
+                                onMigrate={(migratedIdeas, migratedWebinars, migratedTags) => {
+                                    setIdeas(migratedIdeas);
+                                    setScheduledWebinars(migratedWebinars);
+                                    const allTags = new Set([...DEFAULT_TAGS, ...migratedTags]);
+                                    migratedIdeas.forEach(idea => idea.tags?.forEach(t => allTags.add(t)));
+                                    setAvailableTags(Array.from(allTags).sort());
+                                    setLastSync(new Date());
                                 }}
                                 setCurrentView={setCurrentView}
                             />
@@ -506,7 +435,7 @@
                                 <button
                                     onClick={onRefresh}
                                     className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg font-semibold transition"
-                                    title="Refresh from Google Sheets"
+                                    title="Sync"
                                 >
                                     <i className="fas fa-sync-alt"></i>
                                 </button>
@@ -552,7 +481,7 @@
                     {/* Quick Actions */}
                     <div className="bg-white rounded-xl shadow-md p-6">
                         <h2 className="text-2xl font-bold mb-4">Quick Actions</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                             <ActionButton
                                 icon="plus"
                                 title="Quick Capture"
@@ -580,6 +509,13 @@
                                 description="Add or remove tags"
                                 onClick={() => setCurrentView('manage-tags')}
                                 color="purple"
+                            />
+                            <ActionButton
+                                icon="cloud-upload-alt"
+                                title="Migrate Data"
+                                description="Import from Google Sheets"
+                                onClick={() => setCurrentView('migrate')}
+                                color="gray"
                             />
                         </div>
                     </div>
@@ -688,7 +624,8 @@
                 blue: 'bg-blue-500 hover:bg-blue-600',
                 purple: 'bg-purple-500 hover:bg-purple-600',
                 green: 'bg-green-500 hover:bg-green-600',
-                orange: 'bg-orange-500 hover:bg-orange-600'
+                orange: 'bg-orange-500 hover:bg-orange-600',
+                gray: 'bg-gray-500 hover:bg-gray-600'
             };
 
             return (
@@ -726,7 +663,7 @@
                 setDescription('');
                 setSource('');
                 setTags([]);
-                alert('Idea captured and synced to Google Sheets!');
+                alert('Idea captured and saved!');
             };
 
             const toggleTag = (tag) => {
@@ -836,7 +773,7 @@
                                 type="submit"
                                 className="w-full bg-blue-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-blue-700 transition"
                             >
-                                💾 Capture & Sync to Google Sheets
+                                💾 Save Idea
                             </button>
                         </form>
                     </div>
@@ -1076,7 +1013,7 @@
                     status: idea.status === 'idea' ? 'developing' : idea.status
                 };
                 onUpdate(updates);
-                alert('Idea updated and synced!');
+                alert('Idea updated and saved!');
             };
 
             const toggleTag = (tag) => {
@@ -1123,12 +1060,11 @@ User Question: ${chatPrompt}`;
 
                     const fullPrompt = `You're helping David Farr develop a webinar for his "Amazing Mago Monthly Mastery" series. Here's the webinar he's working on:\n\n${context}\n\nProvide helpful suggestions, outline ideas, talking points, or whatever he's asking for.`;
 
-                    const url = `${APPS_SCRIPT_URL}`;
                     const formData = new URLSearchParams();
                     formData.append('action', 'callClaude');
                     formData.append('prompt', fullPrompt);
 
-                    const response = await fetch(url, {
+                    const response = await fetch(API_URL, {
                         method: 'POST',
                         body: formData
                     });
@@ -1325,18 +1261,17 @@ Respond ONLY with a JSON array in this exact format (no markdown, no preamble):
   }
 ]`;
 
-                    const url = `${APPS_SCRIPT_URL}`;
                     const formData = new URLSearchParams();
                     formData.append('action', 'callClaude');
                     formData.append('prompt', fullPrompt);
 
-                    const response = await fetch(url, {
+                    const response = await fetch(API_URL, {
                         method: 'POST',
                         body: formData
                     });
 
                     const data = await response.json();
-                    
+
                     if (data.error) {
                         setError('Failed to generate ideas: ' + data.error);
                         return;
@@ -1556,7 +1491,7 @@ Respond ONLY with a JSON array in this exact format (no markdown, no preamble):
                 if (newTagName.trim() && !availableTags.includes(newTagName.trim())) {
                     onAddTag(newTagName.trim());
                     setNewTagName('');
-                    alert('Tag added and synced! It will now appear everywhere.');
+                    alert('Tag added! It will now appear everywhere.');
                 } else if (availableTags.includes(newTagName.trim())) {
                     alert('This tag already exists!');
                 }
@@ -1621,6 +1556,133 @@ Respond ONLY with a JSON array in this exact format (no markdown, no preamble):
                                 <strong>Note:</strong> Deleting a tag will remove it from ALL ideas that currently use it. This action cannot be undone.
                             </p>
                         </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function MigrateFromSheets({ onMigrate, setCurrentView }) {
+            const OLD_URL = 'https://script.google.com/macros/s/AKfycbwnAXtnYjxwx7n00C_n8otIPyFkOhlCo7HFB_fpF1VKrBmnMi4Ho5a4vavqTvSUERDt/exec';
+            const [appsScriptUrl, setAppsScriptUrl] = useState(OLD_URL);
+            const [isFetching, setIsFetching] = useState(false);
+            const [isMigrating, setIsMigrating] = useState(false);
+            const [preview, setPreview] = useState(null);
+            const [error, setError] = useState('');
+
+            const fetchFromSheets = async () => {
+                if (!appsScriptUrl.trim()) return;
+                setIsFetching(true);
+                setError('');
+                setPreview(null);
+                try {
+                    const [ideasResp, webinarsResp, tagsResp] = await Promise.all([
+                        fetch(`${appsScriptUrl}?action=getIdeas`),
+                        fetch(`${appsScriptUrl}?action=getWebinars`),
+                        fetch(`${appsScriptUrl}?action=getTags`)
+                    ]);
+                    const [ideasRows, webinarsRows, tagsRows] = await Promise.all([
+                        ideasResp.json(), webinarsResp.json(), tagsResp.json()
+                    ]);
+                    const ideas = ideasRows.length > 1 ? ideasRows.slice(1).map(row => ({
+                        id: row[0] || '',
+                        title: row[1] || '',
+                        description: row[2] || '',
+                        source: row[3] || '',
+                        tags: row[4] ? JSON.parse(row[4]) : [],
+                        notes: row[5] || '',
+                        status: row[6] || 'idea',
+                        createdAt: row[7] || new Date().toISOString(),
+                        priority: row[8] || '',
+                        updatedAt: row[9] || new Date().toISOString()
+                    })).filter(i => i.id) : [];
+                    const webinars = webinarsRows.length > 1 ? webinarsRows.slice(1).map(row => ({
+                        id: row[0] || '',
+                        ideaId: row[1] || '',
+                        date: row[2] || '',
+                        title: row[3] || '',
+                        isFlexible: row[4] === 'true'
+                    })).filter(w => w.id) : [];
+                    const tags = tagsRows.map(row => row[0]).filter(t => t);
+                    setPreview({ ideas, webinars, tags });
+                } catch (err) {
+                    setError('Failed to fetch from Apps Script: ' + err.message);
+                } finally {
+                    setIsFetching(false);
+                }
+            };
+
+            const handleMigrate = async () => {
+                if (!preview) return;
+                setIsMigrating(true);
+                try {
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'seedData');
+                    formData.append('data', JSON.stringify(preview));
+                    const response = await fetch(API_URL, { method: 'POST', body: formData });
+                    if (!response.ok) throw new Error('Migration request failed');
+                    const result = await response.json();
+                    if (result.error) throw new Error(result.error);
+                    onMigrate(preview.ideas, preview.webinars, preview.tags);
+                    alert(`Migration complete! Imported ${result.imported.ideas} ideas, ${result.imported.webinars} webinars, ${result.imported.tags} tags.`);
+                    setCurrentView('dashboard');
+                } catch (err) {
+                    setError('Migration failed: ' + err.message);
+                } finally {
+                    setIsMigrating(false);
+                }
+            };
+
+            return (
+                <div className="max-w-3xl mx-auto">
+                    <div className="bg-white rounded-xl shadow-lg p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-3xl font-bold">📦 Migrate from Google Sheets</h2>
+                            <button onClick={() => setCurrentView('dashboard')} className="text-gray-600 hover:text-gray-800">
+                                <i className="fas fa-times text-2xl"></i>
+                            </button>
+                        </div>
+                        <p className="text-gray-600 mb-6">
+                            One-time import of your existing Google Sheets data into Cloudflare KV. This will overwrite any data currently stored in Cloudflare.
+                        </p>
+                        <div className="mb-6">
+                            <label className="block text-sm font-semibold mb-2">Google Apps Script URL</label>
+                            <input
+                                type="text"
+                                value={appsScriptUrl}
+                                onChange={(e) => setAppsScriptUrl(e.target.value)}
+                                placeholder="https://script.google.com/macros/s/..."
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg font-mono text-sm"
+                            />
+                        </div>
+                        <button
+                            onClick={fetchFromSheets}
+                            disabled={isFetching || !appsScriptUrl.trim()}
+                            className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 mb-6"
+                        >
+                            {isFetching ? 'Fetching from Google Sheets...' : 'Fetch Data from Google Sheets'}
+                        </button>
+                        {error && (
+                            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 mb-6">
+                                {error}
+                            </div>
+                        )}
+                        {preview && (
+                            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                                <div className="font-bold text-green-800 mb-3">Ready to import:</div>
+                                <ul className="text-green-700 space-y-1 mb-4">
+                                    <li>✓ {preview.ideas.length} ideas</li>
+                                    <li>✓ {preview.webinars.length} scheduled webinars</li>
+                                    <li>✓ {preview.tags.length} tags</li>
+                                </ul>
+                                <button
+                                    onClick={handleMigrate}
+                                    disabled={isMigrating}
+                                    className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50"
+                                >
+                                    {isMigrating ? 'Migrating...' : `Migrate ${preview.ideas.length} Ideas to Cloudflare`}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             );
