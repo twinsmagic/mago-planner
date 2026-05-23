@@ -1,0 +1,17 @@
+{
+  "name": "Amazing Mago Content Planner",
+  "short_name": "Mago Planner",
+  "description": "Monthly Mastery Webinar System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f3ff",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

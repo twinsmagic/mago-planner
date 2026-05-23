@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mago Webinar Content Planner</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎩</text></svg>">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icon.svg">
+    <meta name="theme-color" content="#7c3aed">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Mago Planner">
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -1105,6 +1113,15 @@ User Question: ${chatPrompt}`;
                                 >
                                     🗑️ Delete
                                 </button>
+                                <button
+                                    onClick={() => {
+                                        onUpdate({ title, description, notes, tags, status: 'delivered' });
+                                        onBack();
+                                    }}
+                                    className="col-span-2 bg-purple-600 text-white px-2 py-2 rounded-lg font-bold hover:bg-purple-700 text-xs sm:text-base"
+                                >
+                                    ✅ Mark as Delivered
+                                </button>
                             </div>
                         </div>
 
@@ -1674,6 +1691,11 @@ Respond ONLY with a JSON array in this exact format (no markdown, no preamble):
         }
 
         ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
     </script>
 </body>
 </html>
