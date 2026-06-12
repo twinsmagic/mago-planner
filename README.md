@@ -8,6 +8,7 @@ Webinar content planning tool for the Amazing Mago Monthly Mastery series.
 - **Backend**: Cloudflare Pages Function (`functions/api.js`)
 - **Storage**: Cloudflare KV (binding name: `PLANNER_KV`)
 - **AI**: Claude API via `ANTHROPIC_API_KEY` environment variable
+- **Auth**: shared-secret `ADMIN_TOKEN` enforced by `functions/_middleware.js` on every route
 
 ## Deploying to Cloudflare Pages
 
@@ -37,7 +38,23 @@ In the Cloudflare dashboard → Pages → your project → Settings → Function
 In Pages → Settings → Environment variables:
 - Add secret: `ANTHROPIC_API_KEY` = your key from [console.anthropic.com](https://console.anthropic.com)
 
-### 5. Migrate your existing data
+### 5. Add the admin token (authentication)
+
+Generate a long random secret:
+
+```bash
+openssl rand -hex 32
+```
+
+In Pages → Settings → Environment variables:
+- Add secret: `ADMIN_TOKEN` = the generated value
+
+Every request to the app (pages and `/api`) requires this token. Browsers get a
+login page — paste the token once and an `HttpOnly; Secure; SameSite=Strict`
+cookie keeps the session. API clients send `Authorization: Bearer <ADMIN_TOKEN>`
+instead.
+
+### 6. Migrate your existing data
 
 1. Open the deployed app
 2. Click **Migrate Data** on the dashboard
@@ -51,3 +68,10 @@ npx wrangler pages dev . --kv PLANNER_KV
 ```
 
 KV data is in-memory only during local dev (resets on restart). Set `ANTHROPIC_API_KEY` as a local secret or env var.
+
+Local secrets live in `.dev.vars` (gitignored), which wrangler loads automatically:
+
+```
+ADMIN_TOKEN=<your local token>
+ANTHROPIC_API_KEY=<optional, for the AI features>
+```
